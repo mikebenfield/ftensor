@@ -1,0 +1,74 @@
+name:                ftensor
+version:             0.1.0.0
+synopsis:            Finite dimensional tensor types.
+license:             BSD3
+license-file:        LICENSE
+author:              Michael Benfield
+maintainer:          mike.benfield@gmail.com
+category:            Math
+build-type:          Simple
+cabal-version:       >=1.10
+
+flag BoundsChecks
+  description: Enable bounds checks
+  default: True
+  manual: True
+
+flag UnsafeChecks
+  description: Enable bounds checks even in unsafe operations
+  default: False
+  manual: True
+
+flag InternalChecks
+  description: Enable internal checks
+  default: False
+  manual: True
+
+library
+  exposed-modules:
+    Math.FTensor.Core2
+    Math.FTensor.SizedList
+  build-depends:       base >=4.8 && <4.9,
+                       vector >=0.11,
+                       deepseq,
+                       ghc-typelits-natnormalise
+  hs-source-dirs:      src
+  default-language:    Haskell2010
+  default-extensions:  
+  ghc-options:         -O2 -Wall -fno-warn-name-shadowing
+                       -fno-warn-missing-signatures
+  include-dirs:
+    include
+  install-includes:
+    ftensor.h
+  if flag(BoundsChecks)
+    cpp-options: -DFTENSOR_BOUNDS_CHECKS
+
+  if flag(UnsafeChecks)
+    cpp-options: -DFTENSOR_UNSAFE_CHECKS
+
+  if flag(InternalChecks)
+    cpp-options: -DFTENSOR_INTERNAL_CHECKS
+
+executable ftensor-test
+  build-depends:       base >=4.8 && <4.9,
+                       tasty >=0.10,
+                       tasty-hunit >=0.9,
+                       tasty-quickcheck >=0.8,
+                       tasty-smallcheck >=0.8,
+                       tasty-th,
+                       smallcheck,
+                       ftensor,
+                       vector
+  main-is:             Main.hs
+  hs-source-dirs:      test
+  default-language:    Haskell2010
+
+executable ftensor-bench
+  build-depends:       base >=4.8 && <4.9,
+                       vector,
+                       ftensor,
+                       criterion
+  main-is:             Main.hs
+  hs-source-dirs:      bench
+  default-language:    Haskell2010
