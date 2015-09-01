@@ -17,14 +17,6 @@ module Math.FTensor.Core2 (
     TensorV,
     TensorU,
 
-    validShape,
-    inBounds,
-    formatShape,
-    unformatShape,
-    indexToI,
-    iToIndex,
-
-    unsafeGenerate,
     generate,
     shape,
     convert,
@@ -39,9 +31,9 @@ module Math.FTensor.Core2 (
     tensorProduct,
     unsafeContract,
     contract,
-    changeBasis,
+    -- changeBasis,
 ) where
-import Debug.Trace -- XXX
+
 import Data.Maybe (fromMaybe)
 import Data.Proxy
 import GHC.Exts
@@ -53,24 +45,23 @@ import qualified Data.Vector as V
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Unboxed as U
 
-import Math.FTensor.SizedList hiding ((++))
-import qualified Math.FTensor.SizedList as SizedList
+import Math.FTensor.Internal
+import Math.FTensor.SizedList (SizedList(..))
 
 #include "ftensor.h"
 
-data Tensor v a (n::Nat) = Tensor (v a) (FormattedShape n)
+data Tensor v a (n::Nat) = Tensor !(v a) {-# UNPACK #-} !Offsets
 
 type TensorV = Tensor V.Vector
 
 type TensorU = Tensor U.Vector
 
 instance (Eq a, G.Vector v a) => Eq (Tensor v a n) where
-    Tensor vec1 shape1 == Tensor vec2 shape2 =
-        shape1 == shape2 && G.eq vec1 vec2
+    Tensor vec1 offsets1 == Tensor vec2 offsets2 =
+        offsets1 == offsets2 && G.eq vec1 vec2
 
 instance (IsListConstraint v a n, Show (NestedList a n))
     => Show (Tensor v a n) where
-
     show = ("fromList " ++) . show . toList
 
 instance {-# OVERLAPPING #-} (Show a, G.Vector v a) => Show (Tensor v a 0)
@@ -78,131 +69,81 @@ instance {-# OVERLAPPING #-} (Show a, G.Vector v a) => Show (Tensor v a 0)
     show (Tensor vec _) = "tensor " ++ show (vec G.! 0)
 
 instance (NFData a, NFData (v a)) => NFData (Tensor v a n) where
-    rnf (Tensor v s) = rnf (v, s)
+    rnf (Tensor v o) = rnf (v, o)
 
 -- instance (Functor v) => Functor (Tensor v a n) where
 --     fmap f (Tensor vec shape) = Tensor (fmap f vec) shape
 
-type Shape (n::Nat) = SizedList n Int
-
-type FormattedShape (n::Nat) = SizedList n Int
-
-type Index (n::Nat) = SizedList n Int
-
 -- bounds checking
-check :: Show b => Bool -> String -> String -> Int -> String -> b -> a -> a
-check False checkType functionName lineNumber fileName otherData _ =
-    error $ fileName ++ " (" ++ (show lineNumber) ++ "): Failed " ++
-        checkType ++ " check in function " ++ functionName ++
-            " with data " ++ (show otherData)
-check _ _ _ _ _ _ val = val
+check :: Show b => String -> Int -> String -> Bool -> String -> b -> a -> a
+check checkType lineNumber fileName False functionName otherData _ =
+    error $ fileName ++ " (" ++ (show lineNumber) ++ ") (" ++
+        functionName ++ "): Failed " ++ checkType ++ "check: " ++
+            (show otherData)
+check _ _ _ _ _ _ x = x
 
-validShape :: Shape n -> Bool
-validShape N = True
-validShape (x:-xs) = x > 0 && validShape xs
+noCheck :: a -> b -> c -> d -> d
+noCheck _ _ _ x = x
+{-# INLINE noCheck #-}
 
-inBounds :: Shape n -> Index n -> Bool
-inBounds (b:-bs) (i:-is) = i >=0 && i < b && inBounds bs is
-inBounds _ _ = True
-
-inBoundsFormatted :: FormattedShape n -> Index n -> Bool
-inBoundsFormatted N _ = True
-inBoundsFormatted s@(hd:-_) index = 0 <= i && i < hd
+generate :: G.Vector v a => Shape n -> (MultiIndex n -> a) -> Tensor v a n
+generate shape f =
+    Tensor (G.generate length (f . unsafeIndexToMultiIndex offsets)) offsets
   where
-     i = indexToI s index
-
-formatShape :: Shape n -> FormattedShape n
-formatShape N = N
-formatShape s@(_:-N) = s
-formatShape (x:-xs) = case formatted of
-    hd:-rest -> x*hd :- formatted
-    _ -> error "formatShape: can't happen"
-  where
-    formatted = formatShape xs
-
-unformatShape :: FormattedShape n -> Shape n
-unformatShape N = N
-unformatShape s@(x:-N) = s
-unformatShape (x:-s@(y:-_)) = div x y :- unformatShape s
-
-indexToI :: FormattedShape n -> Index n -> Int
-indexToI _ (i:-N) = i
-indexToI (x1:-s@(x2:-_)) (i:-is) = i*x2 + indexToI s is
-indexToI _ _ = 0
-
-iToIndex :: FormattedShape n -> Int -> Index n
-iToIndex shape i = fst (f shape)
-  where
-    f :: FormattedShape m -> (Index m, Int)
-    f N = (N, 0)
-    f (s:-N) =
-        let val = i `rem` s
-        in
-        (val:-N, val)
-    f (s2:-s1:-ss) =
-        let (index, a) = f (s1:-ss)
-            newA :: Int
-            newA = (i-a) `rem` s2
-        in
-        (div newA s1 :- index, newA)
-
-unsafeGenerate :: G.Vector v a => Shape n -> (Index n -> a) -> Tensor v a n
-unsafeGenerate shape f =
-    Tensor (G.generate vecSize (g . iToIndex formatted)) formatted
-  where
-    vecSize = case formatted of
-        N -> 1
-        s:-_ -> s
-    formatted = formatShape shape
-    g index =
-        INTERNAL_CHECK(inBoundsFormatted shape index,
-                      "unsafeGenerate", (shape, index))
-            $ f index
-
-generate :: G.Vector v a => Shape n -> (Index n -> a) -> Tensor v a n
-generate = unsafeGenerate
+    (length, offsets) = shapeToOffsets shape
 
 shape :: G.Vector v a => Tensor v a n -> Shape n
-shape (Tensor _ s) = unformatShape s
+shape (Tensor vec offsets) = unsafeOffsetsToShape (G.length vec) offsets
 
 convert :: (G.Vector v a, G.Vector w a) => Tensor v a n -> Tensor w a n
-convert (Tensor vec shape) = Tensor (G.convert vec) shape
+convert (Tensor vec offsets) = Tensor (G.convert vec) offsets
 
-unsafeIndex :: (G.Vector v a) => Tensor v a n -> Index n -> a
-unsafeIndex (Tensor vec shape) index =
-    UNSAFE_CHECK(inBoundsFormatted shape index, "unsafeIndex", (shape, index))
-        $ G.unsafeIndex vec (indexToI shape index)
+unsafeIndex :: (G.Vector v a) => Tensor v a n -> MultiIndex n -> a
+unsafeIndex (Tensor vec offsets) i =
+    UNSAFE_CHECK
+        (inBoundsOffsets (G.length vec) offsets i)
+        "unsafeIndex"
+        (offsets, i)
+        $ G.unsafeIndex vec (multiIndexToIndex offsets i)
 
-index :: (G.Vector v a) => Tensor v a n -> Index n -> a
-index t@(Tensor _ shape) index =
-    BOUNDS_CHECK(inBoundsFormatted shape index, "index", (shape, index))
-        $ unsafeIndex t index
+index :: (G.Vector v a) => Tensor v a n -> MultiIndex n -> a
+index t@(Tensor vec offsets) i =
+    BOUNDS_CHECK
+        (inBoundsOffsets (G.length vec) offsets i)
+        "index"
+        (offsets, i)
+        $ unsafeIndex t i
 
-maybeIndex :: (G.Vector v a) => Tensor v a n -> Index n -> Maybe a
-maybeIndex t@(Tensor _ shape) index
-  | inBoundsFormatted shape index = Just $ unsafeIndex t index
+maybeIndex :: (G.Vector v a) => Tensor v a n -> MultiIndex n -> Maybe a
+maybeIndex t@(Tensor vec offsets) i
+  | inBoundsOffsets (G.length vec) offsets i = Just $ unsafeIndex t i
   | otherwise = Nothing
 
 scalar :: G.Vector v a => Tensor v a 0 -> a
-scalar (Tensor vec shape) =
-    INTERNAL_CHECK(G.length vec == 1, "scalar", (G.length vec, shape))
+scalar (Tensor vec offsets) =
+    INTERNAL_CHECK
+        (G.length vec == 1)
+        "scalar"
+        (G.length vec, offsets)
         $ G.unsafeIndex vec 0
 
 tensor :: G.Vector v a => a -> Tensor v a 0
-tensor x = Tensor (G.cons x G.empty) N
+tensor x = Tensor (G.cons x G.empty) G.empty
 
 unsafeAdd :: (Num a, G.Vector v a) => Tensor v a n -> Tensor v a n -> Tensor v a n
-unsafeAdd (Tensor v1 shape1) (Tensor v2 shape2) =
-    UNSAFE_CHECK(shape1 == shape2 && G.length v1 == G.length v2,
-                "unsafeAdd",
-                (shape1, shape2))
-        $ Tensor (G.zipWith (+) v1 v2) shape1
+unsafeAdd (Tensor v1 offsets1) (Tensor v2 offsets2) =
+    UNSAFE_CHECK
+        (offsets1 == offsets2 && G.length v1 == G.length v2)
+        "unsafeAdd"
+        (offsets1, offsets2)
+        $ Tensor (G.zipWith (+) v1 v2) offsets1
 
 add :: (Num a, G.Vector v a) => Tensor v a n -> Tensor v a n -> Tensor v a n
-add t1@(Tensor v1 shape1) t2@(Tensor v2 shape2) =
-    BOUNDS_CHECK(shape1 == shape2 && G.length v1 == G.length v2,
-                "add",
-                (shape1, shape2))
+add t1@(Tensor v1 offsets1) t2@(Tensor v2 offsets2) =
+    UNSAFE_CHECK
+        (offsets1 == offsets2 && G.length v1 == G.length v2)
+        "add"
+        (offsets1, offsets2)
         $ unsafeAdd t1 t2
 
 tensorProduct
@@ -210,37 +151,37 @@ tensorProduct
     => Tensor v a n
     -> Tensor v a m
     -> Tensor v a (n+m)
-tensorProduct (Tensor v1 shape1) (Tensor v2 shape2) = Tensor newVec newShape
+tensorProduct (Tensor v1 offsets1) (Tensor v2 offsets2) =
+    Tensor newVec newOffsets
   where
     newVec = G.concat $ map (\x -> G.map (*x) v2) (G.toList v1)
-    newShape :: Shape (n+m)
-    newShape = case shape2 of
-        N -> shape1
-        (hd:-_) -> fmap (*hd) shape1 SizedList.++ shape2
+    newOffsets = G.map (* G.length v2) offsets1 G.++ offsets2
 {-# INLINE[1] tensorProduct #-}
 
-{-# RULES "tensorProduct/scalarScalar" tensorProduct = tensorProductScalarScalar #-}
-{-# RULES "tensorProduct/scalar" tensorProduct = tensorProductScalar #-}
+-- {-# RULES
+--     "tensorProduct/scalarScalar" tensorProduct = tensorProductScalarScalar
+--     "tensorProduct/scalar" tensorProduct = tensorProductScalar
+-- #-}
 
-tensorProductScalar
-    :: forall v a (m::Nat). (Num a, G.Vector v a)
-    => Tensor v a 0
-    -> Tensor v a m
-    -> Tensor v a m
-tensorProductScalar (Tensor v1 _) (Tensor v2 shape) = Tensor newVec shape
-  where
-    newVec = G.map (* (G.unsafeIndex v1 0)) v2
-{-# INLINE tensorProductScalar #-}
+-- tensorProductScalar
+--     :: forall v a (m::Nat). (Num a, G.Vector v a)
+--     => Tensor v a 0
+--     -> Tensor v a m
+--     -> Tensor v a m
+-- tensorProductScalar (Tensor v1 _) (Tensor v2 shape) = Tensor newVec shape
+--   where
+--     newVec = G.map (* (G.unsafeIndex v1 0)) v2
+-- {-# INLINE tensorProductScalar #-}
 
-tensorProductScalarScalar
-    :: forall v a. (Num a, G.Vector v a)
-    => Tensor v a 0
-    -> Tensor v a 0
-    -> Tensor v a 0
-tensorProductScalarScalar (Tensor v1 _) (Tensor v2 _) = Tensor newVec N
-  where
-    newVec = G.cons (G.unsafeIndex v1 0 * G.unsafeIndex v2 0) G.empty
-{-# INLINE tensorProductScalarScalar #-}
+-- tensorProductScalarScalar
+--     :: forall v a. (Num a, G.Vector v a)
+--     => Tensor v a 0
+--     -> Tensor v a 0
+--     -> Tensor v a 0
+-- tensorProductScalarScalar (Tensor v1 _) (Tensor v2 _) = Tensor newVec N
+--   where
+--     newVec = G.cons (G.unsafeIndex v1 0 * G.unsafeIndex v2 0) G.empty
+-- {-# INLINE tensorProductScalarScalar #-}
 
 unsafeContract
     :: forall v a (n::Nat). (Num a, G.Vector v a)
@@ -248,79 +189,57 @@ unsafeContract
     -> Int
     -> Int
     -> Tensor v a n
-unsafeContract (Tensor vec fShape) i j =
-    -- uNSAFE_CHECK(0 <= i && i < j && j < SizedList.length fShape && iSize == div j' if j >= G.length vecFShape then 1 else G.unsafeIndex vecFShape j, "unsafeContract", (fShape, i, j))
-    id
-        $ Tensor newVector newFShape
+unsafeContract (Tensor vec offsets) i j =
+    UNSAFE_CHECK
+        (0 <= i && i < j && j < G.length offsets && iSize == jSize)
+        "unsafeContract"
+        (offsets, i, j)
+        (Tensor newVec newOffsets)
   where
-    vecFShape :: U.Vector Int
-    vecFShape = sizedListToVector fShape
-    i' = G.unsafeIndex vecFShape i
-    iSize = div i' $ G.unsafeIndex vecFShape (i+1)
-    j' = G.unsafeIndex vecFShape i
-    ipj = i'+j'
-    others = G.sum vecFShape - ipj
-    resultSize = fromMaybe 1 $ shapeBeforeI G.!? i
-    shapeBeforeI = G.map (flip div i') $ G.slice 0 i vecFShape 
-    shapeBetween = G.map (flip div j') $ G.slice (i+1) (j-i-1) vecFShape
-    shapeAfterJ = G.slice (j+1) (G.length vecFShape - j - 1) vecFShape
-    newFShape :: FormattedShape n
-    newFShape =
-        unsafeVectorToSizedList
-            (shapeBeforeI G.++ shapeBetween G.++ shapeAfterJ)
+    shapeVec = offsetsToShapeVector (G.length vec) offsets
+    newShapeVec =
+        let (beforeJ, afterJ) = G.splitAt j shapeVec
+            (beforeI, middle) = G.splitAt i beforeJ
+        in
+        beforeI G.++ (G.tail middle) G.++ (G.tail afterJ)
+    (newLength, newOffsets) = shapeVectorToOffsets newShapeVec
+    iSize = shapeVec G.! i
+    jSize = shapeVec G.! j
+    iOffset = offsets G.! i
+    jOffset = offsets G.! j
+    sumOffset = iOffset + jOffset
+    othersOffset = G.sum offsets - sumOffset
     sumStartingAt i =
         let vec' :: v a
-            vec' = G.generate iSize (\k -> vec G.! (i+ipj*k))
+            vec' = G.generate iSize (\k -> vec G.! (i+sumOffset*k))
         in
-        trace (show (iSize, i, ipj)) $
         G.sum vec'
-    newVector = G.generate resultSize (\i -> sumStartingAt (i*others))
-
--- unsafeContract
---     :: (Num a, G.Vector v a, KnownNat m, KnownNat n, 0 < m, m < n, n < p+2)
---     => Tensor v a (p+2)
---     -> Proxy m
---     -> Proxy n
---     -> Tensor v a p
--- unsafeContract proxyM proxyN (Tensor vec fShape) i j =
---     UNSAFE_CHECK(0 <= i && i < j && j < SizedList.length fShape,
---                 "unsafeContract", (fShape, i, j))
---         $ undefined
---   where
---     (
+    newVec = G.generate newLength (sumStartingAt . (*othersOffset))
 
 contract
-    :: (Num a, G.Vector v a)
+    :: forall v a (n::Nat). (Num a, G.Vector v a)
     => Tensor v a (n+2)
-    -> YesNoList (n+2) 2
+    -> Int
+    -> Int
     -> Tensor v a n
-contract (Tensor vec fShape) yn = Tensor undefined newFShape
+contract t@(Tensor vec offsets) i j =
+    BOUNDS_CHECK
+        (0 <= i && i < j && j < G.length offsets && iSize == jSize)
+        "unsafeContract"
+        (offsets, i, j)
+        $ unsafeContract t i j
   where
-    newFShape = dropYes fShape yn
+    shapeVec = offsetsToShapeVector (G.length vec) offsets
+    iSize = shapeVec G.! i
+    jSize = shapeVec G.! j
 
-dropYes :: FormattedShape (m+n) -> YesNoList (m+n) n -> FormattedShape m
-dropYes fShape yn = fst $ f fShape yn
-  where
-    f :: forall (p::Nat) (q::Nat).
-        FormattedShape (p+q) -> YesNoList (p+q) q -> (FormattedShape p, Int)
-    f N E = (N, 1)
-    f (x:-fShape) (No yns) =
-        let (newFShape, i) = f (unsafeCoerce fShape) (unsafeCoerce yns)
-        in
-        unsafeCoerce (div x i :- newFShape, i)
-    f (x:-fShape) (Yes yns) =
-        let (newFShape, i) = f (unsafeCoerce fShape) (unsafeCoerce yns)
-        in
-        unsafeCoerce (newFShape, i*x)
-    f _ _ = error "dropYes: can't happen"
-
-changeBasis
-    :: (Num a, G.Vector v a)
-    => Tensor v a n
-    -> YesNoList n m
-    -> Tensor v a 2
-    -> Tensor v a n
-changeBasis = undefined
+-- changeBasis
+--     :: (Num a, G.Vector v a)
+--     => Tensor v a n
+--     -> YesNoList n m
+--     -> Tensor v a 2
+--     -> Tensor v a n
+-- changeBasis = undefined
 
 type family NestedList a (n::Nat) where
     NestedList a 0 = a
@@ -328,7 +247,9 @@ type family NestedList a (n::Nat) where
 
 class Flattenable x a (n::Nat) where
     flatten :: Proxy n -> x -> [a]
+
     listShape :: Proxy a -> x -> Shape n
+
     shapeList :: Shape n -> [a] -> x
 
 nLists :: Int -> [a] -> [[a]]
@@ -354,7 +275,7 @@ instance forall x y (n::Nat).
         let sh::Shape (n-1) = listShape (Proxy::Proxy y) hd
         in
         Prelude.length lst :- sh
-    listShape _ _ = BOUNDS_CHECK(False, "shapeF", "") $ undefined
+    listShape _ _ = error "listShape"
 
     shapeList (i :- (a@(j:-_)::Shape (n-1))) lst =
         nLists j $ shapeList a lst
@@ -370,9 +291,15 @@ instance forall v a (n::Nat). IsListConstraint v a n
     type Item (Tensor v a n) = NestedList a (n-1)
 
     fromList lst =
-        let shape = listShape (Proxy::Proxy a) lst
+        let shape :: Shape n
+            shape = listShape (Proxy::Proxy a) lst
         in
-        Tensor (G.fromList $ flatten (Proxy::Proxy n) lst) (formatShape shape)
+        Tensor
+            (G.fromList $ flatten (Proxy::Proxy n) lst)
+            (snd $ shapeToOffsets shape)
 
-    toList (Tensor vec fShape) =
-        shapeList (unformatShape fShape) (G.toList vec)
+    toList (Tensor vec offsets) =
+        let shape :: Shape n
+            shape = unsafeOffsetsToShape (G.length vec) offsets
+        in
+        shapeList shape (G.toList vec)

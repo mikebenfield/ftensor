@@ -1,21 +1,19 @@
 
-#define CHECK(BOOL, FUNCTION_NAME, OTHER_DATA, TYPE) (check (BOOL) (TYPE) (FUNCTION_NAME) __LINE__ __FILE__ (OTHER_DATA))
-
 #ifdef FTENSOR_BOUNDS_CHECKS
-#define BOUNDS_CHECK(BOOL, FUNCTION_NAME, OTHER_DATA) CHECK(BOOL, FUNCTION_NAME, OTHER_DATA, "bounds")
+#define BOUNDS_CHECK (check "bounds" __LINE__ __FILE__)
 #else
-#define BOUNDS_CHECK(BOOL, FUNCTION_NAME, TYPE) (Prelude.id)
+#define BOUNDS_CHECK (noCheck)
 #endif
 
 #ifdef FTENSOR_UNSAFE_CHECKS
-#define UNSAFE_CHECK(BOOL, FUNCTION_NAME, OTHER_DATA) CHECK(BOOL, FUNCTION_NAME, OTHER_DATA, "unsafe")
+#define UNSAFE_CHECK (check "unsafe" __LINE__ __FILE__)
 #else
-#define UNSAFE_CHECK(BOOL, FUNCTION_NAME, TYPE) (Prelude.id)
+#define UNSAFE_CHECK (noCheck)
 #endif
 
 #ifdef FTENSOR_INTERNAL_CHECKS
-#define INTERNAL_CHECK(BOOL, FUNCTION_NAME, OTHER_DATA) CHECK(BOOL, FUNCTION_NAME, OTHER_DATA, "internal")
+#define INTERNAL_CHECK (check "internal" __LINE__ __FILE__)
 #else
-#define INTERNAL_CHECK(BOOL, FUNCTION_NAME, TYPE) (Prelude.id)
+#define INTERNAL_CHECK (noCheck)
 #endif
 

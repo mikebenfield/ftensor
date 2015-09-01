@@ -33,24 +33,22 @@ tests = testGroup "Tests.Math.FTensor.Core2" [smallCheckProperties, autoTests]
 
 autoTests = $(testGroupGenerator)
 
--- case_validShape_1 = validShape (Proxy::Proxy 0) [1] @?= False
-
-case_validShape_1 = validShape (0:-N) @?= False
-case_validShape_2 = validShape (1:-N) @?= True
-
-case_formatShape_1 = formatShape (5:-N) @?= (5:-N)
-case_formatShape_2 = formatShape (3:-5:-N) @?= (15:-5:-N)
-
-case_indexToI_1 = indexToI (5:-N) (3:-N) @?= 3
-case_indexToI_2 = indexToI (15:-5:-N) (2:-3:-N) @?= 13
-
-case_iToIndex_1 = iToIndex (5:-N) 3 @?= (3:-N)
-case_iToIndex_2 = iToIndex (15:-5:-N) 13 @?= (2:-3:-N)
-
 m1 :: TensorV Int 2
 m1 = fromList [[1, 2], [3, 4]]
 
-case_unsafeContract_1 = unsafeContract m1 0 1 @?= tensor 5
+case_contract_1 = contract m1 0 1 @?= tensor 5
+
+m2 :: TensorV Int 2
+m2 = fromList [[1,2,3], [4,5,6], [7,8,9]]
+
+case_contract_2 = contract m2 0 1 @?= tensor 15
+
+m3 :: TensorV Int 3
+m3 = fromList [[[1,2], [3,4]], [[5,6],[7,8]]]
+
+case_contract_3 = contract m3 1 2 @?= fromList [5, 13]
+case_contract_4 = contract m3 0 1 @?= fromList [8, 10]
+case_contract_5 = contract m3 0 2 @?= fromList [7, 11]
 
 newtype T0 = T0 (TensorV Int 0)
     deriving (Show, Eq)
@@ -123,4 +121,4 @@ smallCheckProperties = testGroup "SmallCheck"
                 [ [f 0 0, f 0 1]
                 , [f 1 0, f 1 1]
                 ]
-    ]
+     ]
