@@ -28,9 +28,11 @@ library
   exposed-modules:
     Math.FTensor.Core2
     Math.FTensor.Internal
+    Math.FTensor.InternalArray
     Math.FTensor.SizedList
   build-depends:       base >=4.8 && <4.9,
                        vector >=0.11,
+                       primitive,
                        deepseq,
                        ghc-typelits-natnormalise
   hs-source-dirs:      src
