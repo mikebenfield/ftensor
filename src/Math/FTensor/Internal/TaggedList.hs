@@ -2,7 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE UndecidableInstances #-} -- for NatToNat_
 
-module Math.FTensor.InternalTaggedList (
+module Math.FTensor.Internal.TaggedList (
     Nat_(..),
     Nat_ToNat,
     NatToNat_,
@@ -15,7 +15,7 @@ import Data.Traversable (fmapDefault)
 import GHC.Exts (IsList(..))
 import GHC.TypeLits
 
-import qualified Math.FTensor.InternalCheck
+import qualified Math.FTensor.Internal.Check
 
 #include "ftensor.h"
 

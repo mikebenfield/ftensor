@@ -3,8 +3,8 @@ import Test.Tasty
 
 --import qualified Tests.Math.FTensor.Core2
 --import qualified Tests.Math.FTensor.Internal
-import qualified Tests.Math.FTensor.InternalArray
-import qualified Tests.Math.FTensor.InternalTaggedList
+import qualified Tests.Math.FTensor.Lib.Array
+import qualified Tests.Math.FTensor.Internal.TaggedList
 import qualified Tests.Math.FTensor.SizedList
 -- import qualified Tests.Math.FTensor.Core
 import qualified Tests.Math.FTensor.Simple
@@ -14,8 +14,8 @@ main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "Tests"
-    [ Tests.Math.FTensor.InternalArray.tests
-    , Tests.Math.FTensor.InternalTaggedList.tests
+    [ Tests.Math.FTensor.Lib.Array.tests
+    , Tests.Math.FTensor.Internal.TaggedList.tests
     --[ Tests.Math.FTensor.Internal.tests
     , Tests.Math.FTensor.Simple.tests
     , Tests.Math.FTensor.SizedList.tests

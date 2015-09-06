@@ -7,7 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Tests.Math.FTensor.InternalTaggedList (
+module Tests.Math.FTensor.Internal.TaggedList (
     tests
 ) where
 
@@ -17,9 +17,9 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty.TH (testGroupGenerator)
 
-import Math.FTensor.InternalTaggedList
+import Math.FTensor.Internal.TaggedList
 
-tests = testGroup "Tests.Math.FTensor.InternalTaggedList"
+tests = testGroup "Tests.Math.FTensor.Internal.TaggedList"
     [smallCheckProperties, autoTests]
 
 autoTests = $(testGroupGenerator)

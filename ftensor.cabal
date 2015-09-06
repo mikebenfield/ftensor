@@ -28,9 +28,9 @@ library
   exposed-modules:
     Math.FTensor.Simple
     --Math.FTensor.Internal
-    Math.FTensor.InternalArray
-    Math.FTensor.InternalCheck
-    Math.FTensor.InternalTaggedList
+    Math.FTensor.Lib.Array
+    Math.FTensor.Internal.Check
+    Math.FTensor.Internal.TaggedList
     Math.FTensor.SizedList
   build-depends:       base >=4.8 && <4.9,
                        --vector >=0.11,

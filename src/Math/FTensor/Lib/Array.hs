@@ -1,11 +1,11 @@
 {-# LANGUAGE MagicHash #-}
 
-module Math.FTensor.InternalArray (
-    ArrayC(..),
-    PrimArray(..),
+module Math.FTensor.Lib.Array (
     Array(..),
-    MutablePrimArray(..),
-    MutableArray(..),
+    ArrayPrim(..),
+    ArrayBoxed(..),
+    MutableArrayPrim(..),
+    MutableArrayBoxed(..),
     Prim(..),
     generate,
     unfoldN,
@@ -24,7 +24,7 @@ import Data.Primitive.Types (Prim(..))
 import qualified Data.Primitive.Array as A
 import qualified Data.Primitive.ByteArray as BA
 
-class (IsList a) => ArrayC a m | a -> m, m -> a where
+class (IsList a) => Array a m | a -> m, m -> a where
     index :: a -> Int -> Item a
     length :: a -> Int
 
@@ -36,16 +36,16 @@ class (IsList a) => ArrayC a m | a -> m, m -> a where
     copyM :: m s -> Int -> m s -> Int -> Int -> ST s ()
     freeze :: m s -> ST s a
 
-arrayFromList :: ArrayC a m => [Item a] -> a
+arrayFromList :: Array a m => [Item a] -> a
 arrayFromList lst = arrayFromListN (Prelude.length lst) lst
 
-arrayFromListN :: ArrayC a m => Int -> [Item a] -> a
+arrayFromListN :: Array a m => Int -> [Item a] -> a
 arrayFromListN len lst = unfoldN len f lst
   where
     f [] = error "fromListN: can't happen"
     f (x:xs) = (x, xs)
 
-arrayToList :: ArrayC a m => a -> [Item a]
+arrayToList :: Array a m => a -> [Item a]
 arrayToList arr = loop 0
   where
     len = length arr
@@ -53,105 +53,106 @@ arrayToList arr = loop 0
       | n >= len = []
       | otherwise = index arr n : loop (n+1)
 
-newtype PrimArray e = PrimArray BA.ByteArray
+newtype ArrayPrim e = ArrayPrim BA.ByteArray
 
-newtype MutablePrimArray e s = MutablePrimArray (BA.MutableByteArray s)
+newtype MutableArrayPrim e s = MutableArrayPrim (BA.MutableByteArray s)
 
-instance Prim e => IsList (PrimArray e) where
-    type Item (PrimArray e) = e
+instance Prim e => IsList (ArrayPrim e) where
+    type Item (ArrayPrim e) = e
     fromList = arrayFromList
     fromListN = arrayFromListN
     toList = arrayToList
 
-instance Prim e => ArrayC (PrimArray e) (MutablePrimArray e) where
+instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
     {-# INLINE index #-}
-    index = \(PrimArray ba) i -> BA.indexByteArray ba i
+    index = \(ArrayPrim ba) i -> BA.indexByteArray ba i
 
     {-# INLINE length #-}
-    length = \(PrimArray ba) -> 
+    length = \(ArrayPrim ba) -> 
         div (BA.sizeofByteArray ba) $ I# (sizeOf# (undefined :: e))
 
     {-# INLINE new #-}
     new = \i -> do
         ba <- BA.newByteArray (i * I# (sizeOf# (undefined::e)))
-        return $ MutablePrimArray ba
+        return $ MutableArrayPrim ba
 
     {-# INLINE mLength #-}
-    mLength = \(MutablePrimArray mba) -> BA.sizeofMutableByteArray mba
+    mLength = \(MutableArrayPrim mba) -> BA.sizeofMutableByteArray mba
 
     {-# INLINE read #-}
-    read = \(MutablePrimArray mba) -> BA.readByteArray mba
+    read = \(MutableArrayPrim mba) -> BA.readByteArray mba
 
     {-# INLINE write #-}
-    write = \(MutablePrimArray mba) -> BA.writeByteArray mba
+    write = \(MutableArrayPrim mba) -> BA.writeByteArray mba
 
     {-# INLINE copy #-}
-    copy = \(MutablePrimArray mba) i (PrimArray ba) j k ->
+    copy = \(MutableArrayPrim mba) i (ArrayPrim ba) j k ->
         let sz = I# (sizeOf# (undefined::e))
         in
         BA.copyByteArray mba (i*sz) ba (j*sz) (k*sz)
 
     {-# INLINE copyM #-}
-    copyM = \(MutablePrimArray mba) i (MutablePrimArray mba') j k ->
+    copyM = \(MutableArrayPrim mba) i (MutableArrayPrim mba') j k ->
         let sz = I# (sizeOf# (undefined::e))
         in
         BA.copyMutableByteArray mba (i*sz) mba' (j*sz) (k*sz)
 
     {-# INLINE freeze #-}
-    freeze = \(MutablePrimArray mba) ->
-        BA.unsafeFreezeByteArray mba >>= return . PrimArray
+    freeze = \(MutableArrayPrim mba) ->
+        BA.unsafeFreezeByteArray mba >>= return . ArrayPrim
 
-newtype MutableArray a s = MutableArray (A.MutableArray s a)
+newtype MutableArrayBoxed a s = MutableArrayBoxed (A.MutableArray s a)
 
-newtype Array e = Array (A.Array e)
+newtype ArrayBoxed e = ArrayBoxed (A.Array e)
 
-instance IsList (Array e) where
-    type Item (Array e) = e
+instance IsList (ArrayBoxed e) where
+    type Item (ArrayBoxed e) = e
     fromList = arrayFromList
     fromListN = arrayFromListN
     toList = arrayToList
 
-instance ArrayC (Array e) (MutableArray e) where
+instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     {-# INLINE index #-}
-    index = \(Array a) -> A.indexArray a
+    index = \(ArrayBoxed a) -> A.indexArray a
 
     {-# INLINE length #-}
     -- for some reason Data.Primitive.Array doesn't expose a length function
-    length = \(Array (A.Array x)) -> I# (sizeofArray# x)
+    length = \(ArrayBoxed (A.Array x)) -> I# (sizeofArray# x)
 
     {-# INLINE new #-}
     new = \i -> do
         ma <- A.newArray i undefined
-        return $ MutableArray ma
+        return $ MutableArrayBoxed ma
 
     {-# INLINE mLength #-}
-    mLength = \(MutableArray (A.MutableArray ma)) ->
+    mLength = \(MutableArrayBoxed (A.MutableArray ma)) ->
         I# (sizeofMutableArray# ma)
 
     {-# INLINE read #-}
-    read = \(MutableArray ma) -> A.readArray ma
+    read = \(MutableArrayBoxed ma) -> A.readArray ma
 
     {-# INLINE write #-}
-    write = \(MutableArray ma) -> A.writeArray ma
+    write = \(MutableArrayBoxed ma) -> A.writeArray ma
 
     {-# INLINE copy #-}
-    copy = \(MutableArray ma) i (Array a) -> A.copyArray ma i a
+    copy = \(MutableArrayBoxed ma) i (ArrayBoxed a) -> A.copyArray ma i a
 
     {-# INLINE copyM #-}
-    copyM = \(MutableArray ma) i (MutableArray ma') ->
+    copyM = \(MutableArrayBoxed ma) i (MutableArrayBoxed ma') ->
         A.copyMutableArray ma i ma'
 
     {-# INLINE freeze #-}
-    freeze = \(MutableArray ma) -> A.unsafeFreezeArray ma >>= return . Array
+    freeze = \(MutableArrayBoxed ma) ->
+        A.unsafeFreezeArray ma >>= return . ArrayBoxed
 
-generate :: ArrayC a m => Int -> (Int -> Item a) -> a
+generate :: Array a m => Int -> (Int -> Item a) -> a
 generate len f = runST $ do
     newArr <- new len
     let at = \i -> write newArr i (f i)
     sequence_ $ map at [0..len-1]
     freeze newArr
 
-unfoldN :: ArrayC a m => Int -> (b -> (Item a, b)) -> b -> a
+unfoldN :: Array a m => Int -> (b -> (Item a, b)) -> b -> a
 unfoldN len f init = runST $ do
     newArr <- new len
     ref <- newSTRef init
@@ -164,7 +165,7 @@ unfoldN len f init = runST $ do
     freeze newArr
 
 {-# INLINE[1] convert #-}
-convert :: (ArrayC a m, ArrayC b n, Item a ~ Item b) => a -> b
+convert :: (Array a m, Array b n, Item a ~ Item b) => a -> b
 convert arr = generate (length arr) (index arr)
 
 {-# RULES "convert/id" convert = id #-}

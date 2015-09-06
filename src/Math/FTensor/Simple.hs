@@ -39,11 +39,11 @@ import Data.STRef
 import GHC.Exts (IsList(..))
 import GHC.TypeLits
 
-import Math.FTensor.InternalArray hiding (generate, convert, index, length)
-import Math.FTensor.InternalTaggedList
+import Math.FTensor.Lib.Array hiding (generate, convert, index, length)
+import Math.FTensor.Internal.TaggedList
 import Math.FTensor.SizedList
-import qualified Math.FTensor.InternalArray as A
-import qualified Math.FTensor.InternalCheck
+import qualified Math.FTensor.Lib.Array as A
+import qualified Math.FTensor.Internal.Check
 
 #include "ftensor.h"
 
@@ -64,7 +64,7 @@ type TensorIsListConstraint (dim::Nat) (slotCount::Nat) (scm1::Nat) e =
 
 instance
     ( TensorIsListConstraint dim slotCount scm1 e
-    , ArrayC a m
+    , Array a m
     , Item a ~ e
     )
     => IsList (TensorContents dim slotCount a e) where
@@ -92,7 +92,7 @@ instance
     toList = undefined
 
 class
-    ( ArrayC (ArrayT t e) (MutableArrayT t e)
+    ( Array (ArrayT t e) (MutableArrayT t e)
     , Item (ArrayT t e) ~ e
     )
     => Tensor t e where
@@ -108,7 +108,7 @@ class
 
 data TensorBoxed (dim::Nat) (slotCount::Nat) e where
     ZeroBoxed :: !e -> TensorBoxed dim 0 e
-    PositiveBoxed :: {-# UNPACK #-} !(Array e) -> TensorBoxed dim (n+1) e
+    PositiveBoxed :: {-# UNPACK #-} !(ArrayBoxed e) -> TensorBoxed dim (n+1) e
 
 instance Functor (TensorBoxed dim slotCount) where
     fmap f (ZeroBoxed x) = ZeroBoxed $ f x
@@ -130,8 +130,8 @@ instance TensorIsListConstraint dim slotCount scm1 e
     toList = toList . contents
 
 instance Tensor TensorBoxed e where
-    type ArrayT TensorBoxed e = Array e
-    type MutableArrayT TensorBoxed e = MutableArray e
+    type ArrayT TensorBoxed e = ArrayBoxed e
+    type MutableArrayT TensorBoxed e = MutableArrayBoxed e
 
     {-# INLINE contents #-}
     contents (ZeroBoxed x) = Zero x
@@ -143,7 +143,7 @@ instance Tensor TensorBoxed e where
 
 data TensorPrim (dim::Nat) (slotCount::Nat)  e where
     ZeroPrim :: !e -> TensorPrim dim 0 e
-    PositivePrim :: {-# UNPACK #-} !(PrimArray e) -> TensorPrim dim (n+1) e
+    PositivePrim :: {-# UNPACK #-} !(ArrayPrim e) -> TensorPrim dim (n+1) e
 
 instance (TensorIsListConstraint dim slotCount scm1 e, Prim e)
     => IsList (TensorPrim dim slotCount e) where
@@ -161,8 +161,8 @@ instance (TensorIsListConstraint dim slotCount scm1 e, Prim e)
     toList = toList . contents
 
 instance Prim e => Tensor TensorPrim e where
-    type ArrayT TensorPrim e = PrimArray e
-    type MutableArrayT TensorPrim e = MutablePrimArray e
+    type ArrayT TensorPrim e = ArrayPrim e
+    type MutableArrayT TensorPrim e = MutableArrayPrim e
 
     {-# INLINE contents #-}
     contents (ZeroPrim x) = Zero x
