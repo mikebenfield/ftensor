@@ -19,6 +19,7 @@ import qualified Test.Tasty.SmallCheck as SC
 
 import Test.SmallCheck.Series hiding (generate, Positive)
 
+import Math.FTensor.Lib.Simple
 import Math.FTensor.Simple
 import Math.FTensor.SizedList
 

@@ -29,6 +29,7 @@ library
     Math.FTensor.Simple
     --Math.FTensor.Internal
     Math.FTensor.Lib.Array
+    Math.FTensor.Lib.Simple
     Math.FTensor.Internal.Check
     Math.FTensor.Internal.TaggedList
     Math.FTensor.SizedList
