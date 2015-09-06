@@ -1,8 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MagicHash #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
 
 module Math.FTensor.InternalArray (
     ArrayC(..),
@@ -10,37 +6,64 @@ module Math.FTensor.InternalArray (
     Array(..),
     MutablePrimArray(..),
     MutableArray(..),
+    Prim(..),
+    generate,
+    unfoldN,
+    convert,
 ) where
 
-import Control.Monad.ST (ST)
-import GHC.Exts (Int(..), (*#), sizeofArray#, sizeofMutableArray#)
+import Prelude hiding (length)
+import qualified Prelude
+
+import Control.Monad.ST (ST, runST)
+import Data.Proxy
+import Data.STRef
+import GHC.Exts (Int(..), sizeofArray#, sizeofMutableArray#, IsList(..))
 
 import Data.Primitive.Types (Prim(..))
-import Data.Primitive.Array (Array(..))
 import qualified Data.Primitive.Array as A
 import qualified Data.Primitive.ByteArray as BA
 
-class ArrayC a m | a -> m, m -> a where
-    type Elem a
-
-    index :: a -> Int -> Elem a
+class (IsList a) => ArrayC a m | a -> m, m -> a where
+    index :: a -> Int -> Item a
     length :: a -> Int
 
     new :: Int -> ST s (m s)
     mLength :: m s -> Int
-    read :: m s -> Int -> ST s (Elem a)
-    write :: m s -> Int -> Elem a -> ST s ()
+    read :: m s -> Int -> ST s (Item a)
+    write :: m s -> Int -> Item a -> ST s ()
     copy :: m s -> Int -> a -> Int -> Int -> ST s ()
     copyM :: m s -> Int -> m s -> Int -> Int -> ST s ()
     freeze :: m s -> ST s a
+
+arrayFromList :: ArrayC a m => [Item a] -> a
+arrayFromList lst = arrayFromListN (Prelude.length lst) lst
+
+arrayFromListN :: ArrayC a m => Int -> [Item a] -> a
+arrayFromListN len lst = unfoldN len f lst
+  where
+    f [] = error "fromListN: can't happen"
+    f (x:xs) = (x, xs)
+
+arrayToList :: ArrayC a m => a -> [Item a]
+arrayToList arr = loop 0
+  where
+    len = length arr
+    loop n
+      | n >= len = []
+      | otherwise = index arr n : loop (n+1)
 
 newtype PrimArray e = PrimArray BA.ByteArray
 
 newtype MutablePrimArray e s = MutablePrimArray (BA.MutableByteArray s)
 
-instance Prim e => ArrayC (PrimArray e) (MutablePrimArray e) where
-    type Elem (PrimArray e) = e
+instance Prim e => IsList (PrimArray e) where
+    type Item (PrimArray e) = e
+    fromList = arrayFromList
+    fromListN = arrayFromListN
+    toList = arrayToList
 
+instance Prim e => ArrayC (PrimArray e) (MutablePrimArray e) where
     {-# INLINE index #-}
     index = \(PrimArray ba) i -> BA.indexByteArray ba i
 
@@ -78,18 +101,23 @@ instance Prim e => ArrayC (PrimArray e) (MutablePrimArray e) where
     freeze = \(MutablePrimArray mba) ->
         BA.unsafeFreezeByteArray mba >>= return . PrimArray
 
--- sadly it seems I need this newtype just for swapping the order of the
--- type parameters
 newtype MutableArray a s = MutableArray (A.MutableArray s a)
 
-instance ArrayC (Array e) (MutableArray e) where
-    type Elem (Array e) = e
+newtype Array e = Array (A.Array e)
 
+instance IsList (Array e) where
+    type Item (Array e) = e
+    fromList = arrayFromList
+    fromListN = arrayFromListN
+    toList = arrayToList
+
+instance ArrayC (Array e) (MutableArray e) where
     {-# INLINE index #-}
-    index = A.indexArray
+    index = \(Array a) -> A.indexArray a
 
     {-# INLINE length #-}
-    length = \(Array x) -> I# (sizeofArray# x)
+    -- for some reason Data.Primitive.Array doesn't expose a length function
+    length = \(Array (A.Array x)) -> I# (sizeofArray# x)
 
     {-# INLINE new #-}
     new = \i -> do
@@ -97,7 +125,6 @@ instance ArrayC (Array e) (MutableArray e) where
         return $ MutableArray ma
 
     {-# INLINE mLength #-}
-    -- for some reason Data.Primitive.Array doesn't expose a length function
     mLength = \(MutableArray (A.MutableArray ma)) ->
         I# (sizeofMutableArray# ma)
 
@@ -108,11 +135,36 @@ instance ArrayC (Array e) (MutableArray e) where
     write = \(MutableArray ma) -> A.writeArray ma
 
     {-# INLINE copy #-}
-    copy = \(MutableArray ma) -> A.copyArray ma
+    copy = \(MutableArray ma) i (Array a) -> A.copyArray ma i a
 
     {-# INLINE copyM #-}
     copyM = \(MutableArray ma) i (MutableArray ma') ->
         A.copyMutableArray ma i ma'
 
     {-# INLINE freeze #-}
-    freeze = \(MutableArray ma) -> A.unsafeFreezeArray ma
+    freeze = \(MutableArray ma) -> A.unsafeFreezeArray ma >>= return . Array
+
+generate :: ArrayC a m => Int -> (Int -> Item a) -> a
+generate len f = runST $ do
+    newArr <- new len
+    let at = \i -> write newArr i (f i)
+    sequence_ $ map at [0..len-1]
+    freeze newArr
+
+unfoldN :: ArrayC a m => Int -> (b -> (Item a, b)) -> b -> a
+unfoldN len f init = runST $ do
+    newArr <- new len
+    ref <- newSTRef init
+    let at = \i -> do
+         oldB <- readSTRef ref
+         let (elem, newB) = f oldB
+         writeSTRef ref newB
+         write newArr i elem
+    sequence_ $ map at [0..len-1]
+    freeze newArr
+
+{-# INLINE[1] convert #-}
+convert :: (ArrayC a m, ArrayC b n, Item a ~ Item b) => a -> b
+convert arr = generate (length arr) (index arr)
+
+{-# RULES "convert/id" convert = id #-}

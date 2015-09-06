@@ -11,15 +11,15 @@ module Tests.Math.FTensor.InternalArray (
     tests
 ) where
 
-import Control.Monad.ST
 import Prelude hiding (length)
+
+import Control.Monad.ST
+import GHC.Exts (IsList(..))
     
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty.TH (testGroupGenerator)
-
-import qualified Data.Vector.Generic as G
-import qualified Data.Vector as V
+import qualified Test.Tasty.SmallCheck as SC
 
 import Math.FTensor.InternalArray
 
@@ -51,4 +51,29 @@ case_length_2 = length array2 @?= 2
 case_write_3 = index array2 0 @?= 100
 case_write_4 = index array2 1 @?= 101
 
-smallCheckProperties = testGroup "SmallCheck" []
+array3 :: Array Int
+array3 = convert array2
+
+case_convert_1 = length array3 @?= 2
+case_convert_2 = index array3 0 @?= 100
+case_convert_3 = index array3 1 @?= 101
+
+array4 :: Array Int
+array4 = convert array3
+
+case_convert_4 = length array4 @?= 2
+case_convert_5 = index array4 0 @?= 100
+case_convert_6 = index array4 1 @?= 101
+
+smallCheckProperties = testGroup "SmallCheck"
+    [ SC.testProperty "toList . fromList (Array)" $
+        \(lst::[Int]) ->
+            let (arr::Array Int) = fromList lst
+            in
+            lst == toList arr
+    , SC.testProperty "toList . fromList (ArrayPrim)" $
+        \(lst::[Int]) ->
+            let (arr::PrimArray Int) = fromList lst
+            in
+            lst == toList arr
+    ]

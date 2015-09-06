@@ -1,19 +1,19 @@
 
 #ifdef FTENSOR_BOUNDS_CHECKS
-#define BOUNDS_CHECK (check "bounds" __LINE__ __FILE__)
+#define BOUNDS_CHECK (Math.FTensor.InternalCheck.check "bounds" __LINE__ __FILE__)
 #else
-#define BOUNDS_CHECK (noCheck)
+#define BOUNDS_CHECK (Math.FTensor.InternalCheck.noCheck)
 #endif
 
 #ifdef FTENSOR_UNSAFE_CHECKS
-#define UNSAFE_CHECK (check "unsafe" __LINE__ __FILE__)
+#define UNSAFE_CHECK (Math.FTensor.InternalCheck.check "unsafe" __LINE__ __FILE__)
 #else
-#define UNSAFE_CHECK (noCheck)
+#define UNSAFE_CHECK (Math.FTensor.InternalCheck.noCheck)
 #endif
 
 #ifdef FTENSOR_INTERNAL_CHECKS
-#define INTERNAL_CHECK (check "internal" __LINE__ __FILE__)
+#define INTERNAL_CHECK (Math.FTensor.InternalCheck.check "internal" __LINE__ __FILE__)
 #else
-#define INTERNAL_CHECK (noCheck)
+#define INTERNAL_CHECK (Math.FTensor.InternalCheck.noCheck)
 #endif
 
