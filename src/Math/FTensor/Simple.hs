@@ -28,7 +28,7 @@ module Math.FTensor.Simple (
     changeBasisAll,
 ) where
 
-import Data.Foldable (Foldable, foldr, foldl')
+import Data.Foldable (foldl')
 import Data.Proxy
 import GHC.Exts (IsList(..))
 import GHC.TypeLits
@@ -67,6 +67,14 @@ instance Functor (TensorBoxed dim slotCount) where
     fmap f (ZeroBoxed x) = ZeroBoxed $ f x
     fmap f (PositiveBoxed arr) =
         PositiveBoxed $ generate (A.length arr) (f . A.index arr)
+
+instance Foldable (TensorBoxed dim slotCount) where
+    foldr f init (ZeroBoxed x) = f x init
+    foldr f init (PositiveBoxed arr) = foldr f init arr
+
+instance Traversable (TensorBoxed dim slotCount) where
+    traverse f (ZeroBoxed x) = pure ZeroBoxed <*> (f x)
+    traverse f (PositiveBoxed arr) = pure PositiveBoxed <*> traverse f arr
 
 instance TensorIsListConstraint dim slotCount scm1 e
     => IsList (TensorBoxed dim slotCount e) where

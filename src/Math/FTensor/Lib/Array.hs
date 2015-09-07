@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MagicHash #-}
 
 module Math.FTensor.Lib.Array (
@@ -110,6 +111,19 @@ instance IsList (ArrayBoxed e) where
     fromList = arrayFromList
     fromListN = arrayFromListN
     toList = arrayToList
+
+instance Foldable ArrayBoxed where
+    foldr f init arr = loop (length arr - 1) init
+      where
+        loop i accum
+          | i < 0 = accum
+          | otherwise = loop (i-1) $ f (index arr i) accum
+
+instance Traversable ArrayBoxed where
+    traverse f array = fromListN (length array) <$> traverse f (toList array)
+
+instance Functor ArrayBoxed where
+    fmap f array = generate (length array) (f . index array)
 
 instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     {-# INLINE index #-}
