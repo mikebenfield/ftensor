@@ -52,6 +52,14 @@ instance Functor (SizedList n) where
     fmap f (x:-xs) = f x :- fmap f xs
     fmap _ N = N
 
+instance Foldable (SizedList n) where
+    foldr _ accum N = accum
+    foldr f accum (x:-xs) = f x $ foldr f accum xs
+
+instance Traversable (SizedList n) where
+    traverse _ N = pure N
+    traverse f (x:-xs) = pure (:-) <*> f x <*> traverse f xs
+
 instance NFData a => NFData (SizedList n a) where
     rnf N = ()
     rnf (x:-xs) = rnf (x, xs)
@@ -84,10 +92,6 @@ reverse list = rev list N
     rev :: SizedList p a -> SizedList m a -> SizedList (m+p) a
     rev N ys = ys
     rev (x:-xs) ys = rev xs (x:-ys)
-
-instance Foldable (SizedList n) where
-    foldr _ accum N = accum
-    foldr f accum (x:-xs) = f x $ foldr f accum xs
 
 replicate :: forall a n. KnownNat n => a -> SizedList n a
 replicate val = unsafeRep (fromInteger $ natVal (Proxy :: Proxy n)) N
