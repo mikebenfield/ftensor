@@ -3,29 +3,29 @@
 {-# LANGUAGE UndecidableInstances #-} -- for TensorSizedList
 
 module Math.FTensor.Simple (
-    -- * Types
-    Tensor(..),
-    TensorBoxed(..),
-    TensorPrim(..),
+    -- -- * Types
+    -- Tensor(..),
+    -- TensorBoxed(..),
+    -- TensorPrim(..),
 
-    -- * Indexing
-    MultiIndex,
-    inBounds,
-    unsafeIndex,
-    index,
-    maybeIndex,
+    -- -- * Indexing
+    -- MultiIndex,
+    -- inBounds,
+    -- unsafeIndex,
+    -- index,
+    -- maybeIndex,
 
-    -- * Creating
-    generate,
-    convert,
+    -- -- * Creating
+    -- generate,
+    -- convert,
 
-    -- * Mathematical operations
-    add,
-    tensorProduct,
-    unsafeContract,
-    contract,
-    changeBasis,
-    changeBasisAll,
+    -- -- * Mathematical operations
+    -- add,
+    -- tensorProduct,
+    -- unsafeContract,
+    -- contract,
+    -- changeBasis,
+    -- changeBasisAll,
 ) where
 
 import Data.Foldable (foldl')
@@ -44,170 +44,170 @@ import qualified Math.FTensor.Internal.Check
 
 -- * Types
 
-class
-    ( Array (ArrayT t e) (MutableArrayT t e)
-    , Item (ArrayT t e) ~ e
-    )
-    => Tensor t e where
+-- class
+--     ( Array (ArrayT t e) (MutableArrayT t e)
+--     , Item (ArrayT t e) ~ e
+--     )
+--     => Tensor t e where
 
-    type ArrayT t e
-    type MutableArrayT t e :: * -> *
-    contents
-        :: (t dim slotCount e)
-        -> TensorContents dim slotCount (ArrayT t e) e
-    fromContents
-        :: TensorContents dim slotCount (ArrayT t e) e
-        -> (t dim slotCount e)
+--     type ArrayT t e
+--     type MutableArrayT t e :: * -> *
+--     contents
+--         :: (t dim slotCount e)
+--         -> TensorContents dim slotCount (ArrayT t e) e
+--     fromContents
+--         :: TensorContents dim slotCount (ArrayT t e) e
+--         -> (t dim slotCount e)
 
-data TensorBoxed (dim::Nat) (slotCount::Nat) e where
-    ZeroBoxed :: !e -> TensorBoxed dim 0 e
-    PositiveBoxed :: {-# UNPACK #-} !(ArrayBoxed e) -> TensorBoxed dim (n+1) e
+-- data TensorBoxed (dim::Nat) (slotCount::Nat) e where
+--     ZeroBoxed :: !e -> TensorBoxed dim 0 e
+--     PositiveBoxed :: {-# UNPACK #-} !(ArrayBoxed e) -> TensorBoxed dim (n+1) e
 
-instance Functor (TensorBoxed dim slotCount) where
-    fmap f (ZeroBoxed x) = ZeroBoxed $ f x
-    fmap f (PositiveBoxed arr) =
-        PositiveBoxed $ generate (A.length arr) (f . A.index arr)
+-- instance Functor (TensorBoxed dim slotCount) where
+--     fmap f (ZeroBoxed x) = ZeroBoxed $ f x
+--     fmap f (PositiveBoxed arr) =
+--         PositiveBoxed $ generate (A.length arr) (f . A.index arr)
 
-instance Foldable (TensorBoxed dim slotCount) where
-    foldr f init (ZeroBoxed x) = f x init
-    foldr f init (PositiveBoxed arr) = foldr f init arr
+-- instance Foldable (TensorBoxed dim slotCount) where
+--     foldr f init (ZeroBoxed x) = f x init
+--     foldr f init (PositiveBoxed arr) = foldr f init arr
 
-instance Traversable (TensorBoxed dim slotCount) where
-    traverse f (ZeroBoxed x) = pure ZeroBoxed <*> (f x)
-    traverse f (PositiveBoxed arr) = pure PositiveBoxed <*> traverse f arr
+-- instance Traversable (TensorBoxed dim slotCount) where
+--     traverse f (ZeroBoxed x) = pure ZeroBoxed <*> (f x)
+--     traverse f (PositiveBoxed arr) = pure PositiveBoxed <*> traverse f arr
 
-instance TensorIsListConstraint dim slotCount scm1 e
-    => IsList (TensorBoxed dim slotCount e) where
+-- instance TensorIsListConstraint dim slotCount scm1 e
+--     => IsList (TensorBoxed dim slotCount e) where
 
-    type Item (TensorBoxed dim slotCount e) = IsListContents dim slotCount e
+--     type Item (TensorBoxed dim slotCount e) = IsListContents dim slotCount e
 
-    {-# INLINE fromList #-}
-    fromList = fromContents . fromList
+--     {-# INLINE fromList #-}
+--     fromList = fromContents . fromList
 
-    {-# INLINE fromListN #-}
-    fromListN = \i lst -> fromContents $ fromListN i lst
+--     {-# INLINE fromListN #-}
+--     fromListN = \i lst -> fromContents $ fromListN i lst
 
-    {-# INLINE toList #-}
-    toList = toList . contents
+--     {-# INLINE toList #-}
+--     toList = toList . contents
 
-instance Tensor TensorBoxed e where
-    type ArrayT TensorBoxed e = ArrayBoxed e
-    type MutableArrayT TensorBoxed e = MutableArrayBoxed e
+-- instance Tensor TensorBoxed e where
+--     type ArrayT TensorBoxed e = ArrayBoxed e
+--     type MutableArrayT TensorBoxed e = MutableArrayBoxed e
 
-    {-# INLINE contents #-}
-    contents (ZeroBoxed x) = Zero x
-    contents (PositiveBoxed arr) = Positive arr
+--     {-# INLINE contents #-}
+--     contents (ZeroBoxed x) = Zero x
+--     contents (PositiveBoxed arr) = Positive arr
 
-    {-# INLINE fromContents #-}
-    fromContents (Zero x) = ZeroBoxed x
-    fromContents (Positive arr) = PositiveBoxed arr
+--     {-# INLINE fromContents #-}
+--     fromContents (Zero x) = ZeroBoxed x
+--     fromContents (Positive arr) = PositiveBoxed arr
 
-data TensorPrim (dim::Nat) (slotCount::Nat)  e where
-    ZeroPrim :: !e -> TensorPrim dim 0 e
-    PositivePrim :: {-# UNPACK #-} !(ArrayPrim e) -> TensorPrim dim (n+1) e
+-- data TensorPrim (dim::Nat) (slotCount::Nat)  e where
+--     ZeroPrim :: !e -> TensorPrim dim 0 e
+--     PositivePrim :: {-# UNPACK #-} !(ArrayPrim e) -> TensorPrim dim (n+1) e
 
-instance (TensorIsListConstraint dim slotCount scm1 e, Prim e)
-    => IsList (TensorPrim dim slotCount e) where
+-- instance (TensorIsListConstraint dim slotCount scm1 e, Prim e)
+--     => IsList (TensorPrim dim slotCount e) where
 
-    type Item (TensorPrim dim slotCount e) =
-        IsListContents dim slotCount e
+--     type Item (TensorPrim dim slotCount e) =
+--         IsListContents dim slotCount e
 
-    {-# INLINE fromList #-}
-    fromList = fromContents . fromList
+--     {-# INLINE fromList #-}
+--     fromList = fromContents . fromList
 
-    {-# INLINE fromListN #-}
-    fromListN i lst = fromContents $ fromListN i lst
+--     {-# INLINE fromListN #-}
+--     fromListN i lst = fromContents $ fromListN i lst
 
-    {-# INLINE toList #-}
-    toList = toList . contents
+--     {-# INLINE toList #-}
+--     toList = toList . contents
 
-instance Prim e => Tensor TensorPrim e where
-    type ArrayT TensorPrim e = ArrayPrim e
-    type MutableArrayT TensorPrim e = MutableArrayPrim e
+-- instance Prim e => Tensor TensorPrim e where
+--     type ArrayT TensorPrim e = ArrayPrim e
+--     type MutableArrayT TensorPrim e = MutableArrayPrim e
 
-    {-# INLINE contents #-}
-    contents (ZeroPrim x) = Zero x
-    contents (PositivePrim arr) = Positive arr
+--     {-# INLINE contents #-}
+--     contents (ZeroPrim x) = Zero x
+--     contents (PositivePrim arr) = Positive arr
 
-    {-# INLINE fromContents #-}
-    fromContents (Zero x) = ZeroPrim x
-    fromContents (Positive arr) = PositivePrim arr
+--     {-# INLINE fromContents #-}
+--     fromContents (Zero x) = ZeroPrim x
+--     fromContents (Positive arr) = PositivePrim arr
 
--- * Indexing
+-- -- * Indexing
 
-type MultiIndex (slotCount::Nat) = SizedList slotCount Int
+-- type MultiIndex (slotCount::Nat) = SizedList slotCount Int
 
-inBounds :: Int -> MultiIndex slotCount -> Bool
-inBounds _ N = True
-inBounds dim (i:-is)
-  | i >= 0 && i < dim = inBounds dim is
-  | otherwise = False
+-- inBounds :: Int -> MultiIndex slotCount -> Bool
+-- inBounds _ N = True
+-- inBounds dim (i:-is)
+--   | i >= 0 && i < dim = inBounds dim is
+--   | otherwise = False
 
-multiIndexToI :: Int -> MultiIndex slotCount -> Int
-multiIndexToI dim multiIndex = foldl' f 0 multiIndex
-  where
-    f accum new = dim*accum + new
+-- multiIndexToI :: Int -> MultiIndex slotCount -> Int
+-- multiIndexToI dim multiIndex = foldl' f 0 multiIndex
+--   where
+--     f accum new = dim*accum + new
 
-unsafeIndex
-    :: forall t e dim slotCount
-    . (Tensor t e, KnownNat dim)
-    => t dim slotCount e
-    -> MultiIndex slotCount
-    -> e
-unsafeIndex t multiIndex = case contents t of
-    Zero x -> x
-    Positive arr -> UNSAFE_CHECK
-        (inBounds dim' multiIndex)
-        "unsafeIndex"
-        (dim', multiIndex)
-        A.index arr (multiIndexToI dim' multiIndex)
-  where
-    dim' :: Int
-    dim' = fromInteger . natVal $ (Proxy::Proxy dim)
+-- unsafeIndex
+--     :: forall t e dim slotCount
+--     . (Tensor t e, KnownNat dim)
+--     => t dim slotCount e
+--     -> MultiIndex slotCount
+--     -> e
+-- unsafeIndex t multiIndex = case contents t of
+--     Zero x -> x
+--     Positive arr -> UNSAFE_CHECK
+--         (inBounds dim' multiIndex)
+--         "unsafeIndex"
+--         (dim', multiIndex)
+--         A.index arr (multiIndexToI dim' multiIndex)
+--   where
+--     dim' :: Int
+--     dim' = fromInteger . natVal $ (Proxy::Proxy dim)
 
-index
-    :: forall t e dim slotCount
-    . (Tensor t e, KnownNat dim)
-    => t dim slotCount e
-    -> MultiIndex slotCount
-    -> e
-index t multiIndex = BOUNDS_CHECK
-    (inBounds dim' multiIndex)
-    "index"
-    (dim', multiIndex)
-    $ unsafeIndex t multiIndex
-  where
-    dim' = fromInteger . natVal $ (Proxy::Proxy dim)
+-- index
+--     :: forall t e dim slotCount
+--     . (Tensor t e, KnownNat dim)
+--     => t dim slotCount e
+--     -> MultiIndex slotCount
+--     -> e
+-- index t multiIndex = BOUNDS_CHECK
+--     (inBounds dim' multiIndex)
+--     "index"
+--     (dim', multiIndex)
+--     $ unsafeIndex t multiIndex
+--   where
+--     dim' = fromInteger . natVal $ (Proxy::Proxy dim)
 
-maybeIndex
-    :: forall t e dim slotCount
-    . (Tensor t e, KnownNat dim)
-    => t dim slotCount e
-    -> MultiIndex slotCount
-    -> Maybe e
-maybeIndex t multiIndex
-  | inBounds dim' multiIndex = Just $ unsafeIndex t multiIndex
-  | otherwise = Nothing
-  where
-    dim' = fromInteger . natVal $ (Proxy::Proxy dim)
+-- maybeIndex
+--     :: forall t e dim slotCount
+--     . (Tensor t e, KnownNat dim)
+--     => t dim slotCount e
+--     -> MultiIndex slotCount
+--     -> Maybe e
+-- maybeIndex t multiIndex
+--   | inBounds dim' multiIndex = Just $ unsafeIndex t multiIndex
+--   | otherwise = Nothing
+--   where
+--     dim' = fromInteger . natVal $ (Proxy::Proxy dim)
 
--- * Creating
+-- -- * Creating
 
-generate = undefined
+-- generate = undefined
 
-{-# INLINE[1] convert #-}
-convert :: (Tensor t e, Tensor u e) => t dim slotCount e -> u dim slotCount e
-convert t = fromContents $ case contents t of
-    Positive arr -> Positive $ A.convert arr
-    Zero x -> Zero x
+-- {-# INLINE[1] convert #-}
+-- convert :: (Tensor t e, Tensor u e) => t dim slotCount e -> u dim slotCount e
+-- convert t = fromContents $ case contents t of
+--     Positive arr -> Positive $ A.convert arr
+--     Zero x -> Zero x
 
-{-# RULES "convert/id" convert = id #-}
+-- {-# RULES "convert/id" convert = id #-}
 
--- * Mathematical operations
+-- -- * Mathematical operations
 
-add = undefined
-tensorProduct = undefined
-unsafeContract = undefined
-contract = undefined
-changeBasis = undefined
-changeBasisAll = undefined
+-- add = undefined
+-- tensorProduct = undefined
+-- unsafeContract = undefined
+-- contract = undefined
+-- changeBasis = undefined
+-- changeBasisAll = undefined

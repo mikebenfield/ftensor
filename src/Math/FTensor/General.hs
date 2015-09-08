@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE UndecidableInstances #-} -- for TensorSizedList
+--{-# LANGUAGE UndecidableInstances #-} -- for TensorSizedList
 
 module Math.FTensor.General (
     -- * Types
@@ -40,7 +40,6 @@ import GHC.TypeLits
 import Math.FTensor.Lib.Array hiding (generate, convert, index)
 import Math.FTensor.Lib.General
 import Math.FTensor.Lib.TypeList
-import Math.FTensor.Internal.TaggedList
 import Math.FTensor.SizedList
 import qualified Math.FTensor.Lib.Array as A
 import qualified Math.FTensor.Internal.Check

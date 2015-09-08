@@ -44,8 +44,8 @@ instance Traversable a => Traversable (Tensor a dims) where
 instance
     ( dims ~ (d ': ds)
     , TensorC a m e
-    , IsList (TaggedList2 dims e)
-    , Item (TaggedList2 dims e) ~ IsListItem dims e
+    , IsList (TaggedList dims e)
+    , Item (TaggedList dims e) ~ IsListItem dims e
     , KnownNat (Product dims)
     )
     => IsList (Tensor a dims e) where
@@ -56,7 +56,7 @@ instance
 
     fromListN len lst =
         let arrayLen = natIntVal (Proxy::Proxy (Product dims))
-            (lst'::TaggedList2 dims e) = fromListN len lst
+            (lst'::TaggedList dims e) = fromListN len lst
         in
         Tensor $ runST $ do
             newArr <- new arrayLen
