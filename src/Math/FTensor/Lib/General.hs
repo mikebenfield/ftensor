@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-} -- for IsList
 
 module Math.FTensor.Lib.General (
@@ -28,6 +29,9 @@ import Math.FTensor.Lib.TypeList
 newtype Tensor a (dims::[Nat]) e = Tensor (a e)
 
 type TensorC a m e = (Array (a e) m, Item (a e) ~ e)
+
+deriving instance Eq (a e) => Eq (Tensor a dims e)
+deriving instance Show (a e) => Show (Tensor a dims e) -- XXX temporary
 
 instance Functor a => Functor (Tensor a dims) where
     {-# INLINE fmap #-}

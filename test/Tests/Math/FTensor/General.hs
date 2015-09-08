@@ -1,9 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -129,4 +130,50 @@ case_pIndex_35 = pIndex t1 (Proxy::Proxy '[1,2,2]) @?= 23
 case_index_36 = index t1 (1:-2:-3:-N) @?= 24
 case_pIndex_36 = pIndex t1 (Proxy::Proxy '[1,2,3]) @?= 24
 
-smallCheckProperties = testGroup "SmallCheck" []
+case_generate_1 =
+    let f :: SizedList 1 Int -> Int
+        f (i:-N) = i
+        v2 :: TensorBoxed '[4] Int
+        v2 = generate f
+    in
+    case v2 of
+        Tensor arr -> arr @?= fromList [0,1,2,3]
+
+newtype T0 = T0 (TensorBoxed '[] Int)
+    deriving (Show, Eq)
+
+instance (Monad m) => Serial m T0 where
+    series = cons1 (T0 . tensor)
+
+newtype T2 = T2 (TensorBoxed '[2] Int)
+    deriving (Show, Eq)
+
+instance (Monad m) => Serial m T2 where
+    series = cons2 f
+      where
+        f :: Int -> Int -> T2
+        f i j = T2 $ fromList [i, j]
+
+smallCheckProperties = testGroup "SmallCheck"
+    [ SC.testProperty "scalar . tensor" $
+        \(i::Int) ->
+            let t :: TensorBoxed '[] Int
+                t = tensor i
+            in
+            i == scalar t
+    , SC.testProperty "tensor . scalar" $
+        \(T0 t) ->
+            t == tensor (scalar t)
+    , SC.testProperty "tensorProduct 1" $
+        \(T2 t1, T2 t2) ->
+            let prod = tensorProduct t1 t2
+            in
+            prod ==
+                [ [ index t1 (0:-N) * index t2 (0:-N)
+                  , index t1 (0:-N) * index t2 (1:-N)
+                  ]
+                , [ index t1 (1:-N) * index t2 (0:-N)
+                  , index t1 (1:-N) * index t2 (1:-N)
+                  ]
+                ]
+    ]

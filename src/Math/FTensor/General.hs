@@ -1,6 +1,5 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE CPP #-}
---{-# LANGUAGE UndecidableInstances #-} -- for TensorSizedList
 
 module Math.FTensor.General (
     -- * Types
@@ -13,6 +12,7 @@ module Math.FTensor.General (
     unsafeIndex,
     index,
     maybeIndex,
+    scalar,
 
     -- MultiIndex,
     -- inBounds,
@@ -23,18 +23,20 @@ module Math.FTensor.General (
     -- * Creating
     generate,
     convert,
+    tensor,
 
-    -- -- * Mathematical operations
-    -- add,
-    -- tensorProduct,
+    -- * Mathematical operations
+    add,
+    tensorProduct,
     -- unsafeContract,
     -- contract,
     -- changeBasis,
     -- changeBasisAll,
 ) where
 
+import Control.Monad.ST (runST)
 import Data.Proxy
-import GHC.Exts (IsList(..))
+import GHC.Exts (fromListN)
 import GHC.TypeLits
 
 import Math.FTensor.Lib.Array hiding (generate, convert, index)
@@ -113,6 +115,14 @@ maybeIndex t multiIndex
   | inBounds (Proxy::Proxy dims) multiIndex = Just $ unsafeIndex t multiIndex
   | otherwise = Nothing
 
+scalar :: TensorC a m e => Tensor a '[] e -> e
+scalar (Tensor arr) =
+    INTERNAL_CHECK
+        (A.length arr == 1)
+        "scalar"
+        (A.length arr)
+        $ A.index arr 0
+
 -- * Creating
 
 generate
@@ -122,10 +132,9 @@ generate
     , KnownType multiIndices [SizedList (Length dims) Int]
     , KnownType (Product dims) Int
     )
-    => Proxy dims
-    -> ((SizedList (Length dims) Int) -> e)
+    => ((SizedList (Length dims) Int) -> e)
     -> Tensor a dims e
-generate _ f = Tensor $ fromListN len (fmap f lists)
+generate f = Tensor $ fromListN len (fmap f lists)
   where
     len :: Int
     len = summon (Proxy::Proxy (Product dims))
@@ -138,10 +147,53 @@ convert (Tensor arr) = Tensor $ A.convert arr
 
 {-# RULES "convert/id" convert = id #-}
 
--- -- -- * Mathematical operations
+tensor :: TensorC a m e => e -> Tensor a '[] e
+tensor x = Tensor (A.generate 1 $ const x)
 
--- -- add = undefined
--- -- tensorProduct = undefined
+-- * Mathematical operations
+
+add
+    :: (Num e, TensorC a m e)
+    => Tensor a dims e
+    -> Tensor a dims e
+    -> Tensor a dims e
+add (Tensor arr1) (Tensor arr2) =
+    INTERNAL_CHECK
+        (A.length arr1 == A.length arr2)
+        "add"
+        (A.length arr1, A.length arr2)
+        $ Tensor $ A.generate
+            (A.length arr1)
+            (\i -> A.index arr1 i + A.index arr2 i)
+
+tensorProduct
+    :: forall a m e (ds1::[Nat]) (ds2::[Nat]).
+    ( TensorC a m e
+    , Num e
+    , KnownType (Product ds1) Int
+    , KnownType (Product ds2) Int
+    )
+    => Tensor a ds1 e
+    -> Tensor a ds2 e
+    -> Tensor a (Append ds1 ds2) e
+tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
+    newArr <- A.new newLen
+    let oneRow = \i ->
+         let x = A.index arr1 i
+             i' = i*len2
+         in
+         mapM_
+            (\j -> A.write newArr (j+i') (x * A.index arr2 j))
+            [0 .. len2-1]
+    mapM_ oneRow [0..len1-1]
+    freeze newArr
+  where
+    newLen = len1 * len2
+    len1 :: Int
+    len1 = summon (Proxy::Proxy (Product ds1))
+    len2 :: Int
+    len2 = summon (Proxy::Proxy (Product ds2))
+
 -- -- unsafeContract = undefined
 -- -- contract = undefined
 -- -- changeBasis = undefined
