@@ -8,6 +8,7 @@ import qualified Tests.Math.FTensor.Internal.TaggedList
 import qualified Tests.Math.FTensor.SizedList
 -- import qualified Tests.Math.FTensor.Core
 import qualified Tests.Math.FTensor.Simple
+import qualified Tests.Math.FTensor.General
 -- import qualified Tests.Math.FTensor.Types
 
 main = defaultMain tests
@@ -17,6 +18,7 @@ tests = testGroup "Tests"
     [ Tests.Math.FTensor.Lib.Array.tests
     , Tests.Math.FTensor.Internal.TaggedList.tests
     --[ Tests.Math.FTensor.Internal.tests
+    , Tests.Math.FTensor.General.tests
     , Tests.Math.FTensor.Simple.tests
     , Tests.Math.FTensor.SizedList.tests
     ]

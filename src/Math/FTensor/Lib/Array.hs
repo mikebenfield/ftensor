@@ -54,9 +54,21 @@ arrayToList arr = loop 0
       | n >= len = []
       | otherwise = index arr n : loop (n+1)
 
+arrayEq :: (Eq e, Array a m, e ~ Item a) => a -> a -> Bool
+arrayEq lhs rhs = len == length rhs && all f [0..len-1]
+  where
+    f i = index rhs i == index lhs i
+    len = length lhs
+
 newtype ArrayPrim e = ArrayPrim BA.ByteArray
 
 newtype MutableArrayPrim e s = MutableArrayPrim (BA.MutableByteArray s)
+
+instance (Eq e, Prim e) => Eq (ArrayPrim e) where
+    (==) = arrayEq
+
+instance (Show e, Prim e) => Show (ArrayPrim e) where
+    show arr = "fromList " ++ show (toList arr)
 
 instance Prim e => IsList (ArrayPrim e) where
     type Item (ArrayPrim e) = e
@@ -105,6 +117,12 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
 newtype MutableArrayBoxed a s = MutableArrayBoxed (A.MutableArray s a)
 
 newtype ArrayBoxed e = ArrayBoxed (A.Array e)
+
+instance Eq e => Eq (ArrayBoxed e) where
+    (==) = arrayEq
+
+instance Show e => Show (ArrayBoxed e) where
+    show arr = "fromList " ++ show (toList arr)
 
 instance IsList (ArrayBoxed e) where
     type Item (ArrayBoxed e) = e

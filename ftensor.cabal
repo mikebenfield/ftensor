@@ -26,10 +26,13 @@ flag InternalChecks
 
 library
   exposed-modules:
+    Math.FTensor.General
     Math.FTensor.Simple
     --Math.FTensor.Internal
     Math.FTensor.Lib.Array
+    Math.FTensor.Lib.General
     Math.FTensor.Lib.Simple
+    Math.FTensor.Lib.TypeList
     Math.FTensor.Internal.Check
     Math.FTensor.Internal.TaggedList
     Math.FTensor.SizedList
