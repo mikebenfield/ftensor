@@ -60,7 +60,8 @@ instance KnownNat len => IsList (TaggedList2 '[len] item) where
 
     toList (One2 lst) = lst
 
-instance (KnownNat length1, KnownNat length2, KnownList lengths) =>
+instance (KnownNat length1, KnownNat length2,
+         KnownType lengths [Int]) =>
     IsList (TaggedList2 (length1 ': length2 ': lengths) item) where
 
     type Item (TaggedList2 (length1 ': length2 ': lengths) item) =

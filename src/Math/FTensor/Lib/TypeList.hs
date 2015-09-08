@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -8,7 +9,7 @@ module Math.FTensor.Lib.TypeList (
     Snd,
 
     -- * List operations
-    (++),
+    --('++),
     Concat,
     Length,
     Head,
@@ -18,16 +19,24 @@ module Math.FTensor.Lib.TypeList (
     Take,
     Drop,
     SplitAt,
+    EnumFromTo,
+    AttachEach,
+    CartesianProduct,
     Sum,
     Product,
 
     -- * Types to values
     natIntVal,
-    KnownList(..),
+    KnownType(..),
+    --KnownList(..),
 ) where
+
+import Prelude hiding ((++))
 
 import Data.Proxy
 import GHC.TypeLits
+
+import Math.FTensor.SizedList hiding ((++))
 
 -- * Tuples
 
@@ -78,6 +87,19 @@ type family Drop (n::Nat) (list::[k]) :: [k] where
 type family SplitAt (n::Nat) (list::[k]) :: ([k], [k]) where
     SplitAt n list = '(,) (Take n list) (Drop n list)
 
+type family EnumFromTo (from::Nat) (to::Nat) :: [Nat] where
+    EnumFromTo a a = '[a]
+    EnumFromTo a b = a ': EnumFromTo (a+1) b
+
+type family AttachEach (a::k) (bs::[[k]]) :: [[k]] where
+    AttachEach a '[] = '[]
+    AttachEach a (b ': bs) = (a ': b) ': AttachEach a bs
+
+type family CartesianProduct (a::[k]) (bs::[[k]]) :: [[k]] where
+    CartesianProduct '[] bs = '[]
+    CartesianProduct (a ': as) bs =
+        (AttachEach a bs) ++ CartesianProduct as bs
+
 type family Sum (ns::[Nat]) :: Nat where
     Sum '[] = 0
     Sum (n ': ns) = n + Sum ns
@@ -92,14 +114,34 @@ type family Product (ns::[Nat]) :: Nat where
 natIntVal :: forall (n::Nat). KnownNat n => Proxy n -> Int
 natIntVal = fromInteger . natVal
 
-class KnownList (list::[Nat]) where
-    listVal :: Proxy list -> [Integer]
-    listIntVal :: Proxy list -> [Int]
+class KnownType (typ::k) result where
+    summon :: (Proxy typ) -> result
 
-instance KnownList ('[]::[Nat]) where
-    listVal _ = []
-    listIntVal _ = []
+instance KnownNat n => KnownType n Integer where
+    {-# INLINE summon #-}
+    summon = natVal
 
-instance (KnownList xs, KnownNat x) => KnownList (x ': xs) where
-    listVal _ = natVal (Proxy::Proxy x) : listVal (Proxy::Proxy xs)
-    listIntVal _ = natIntVal (Proxy::Proxy x) : listIntVal (Proxy::Proxy xs)
+instance KnownNat n => KnownType n Int where
+    {-# INLINE summon #-}
+    summon = fromInteger . natVal
+
+instance KnownType '[] [a] where
+    {-# INLINE summon #-}
+    summon _ = []
+
+instance (KnownType d a, KnownType ds [a]) => KnownType (d ': ds) [a] where
+    summon _ =
+        summon (Proxy::Proxy d) : summon (Proxy::Proxy ds)
+
+instance KnownType '[] (SizedList 0 a) where
+    {-# INLINE summon #-}
+    summon _ = N
+
+instance
+    ( len ~ (Length ds + 1)
+    , len ~ (1 + Length ds)
+    , KnownType d a
+    , KnownType ds (SizedList (Length ds) a)
+    )
+    => KnownType (d ': ds) (SizedList len a) where
+    summon _ = summon (Proxy::Proxy d) :- summon (Proxy::Proxy ds)

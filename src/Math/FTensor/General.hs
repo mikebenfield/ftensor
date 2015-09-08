@@ -4,20 +4,25 @@
 
 module Math.FTensor.General (
     -- * Types
-    Tensor(..),
-    TensorBoxed(..),
-    -- TensorPrim(..),
+    Tensor,
+    TensorBoxed,
+    TensorPrim,
 
-    -- -- * Indexing
+    -- * Indexing
+    pIndex,
+    unsafeIndex,
+    index,
+    maybeIndex,
+
     -- MultiIndex,
     -- inBounds,
     -- unsafeIndex,
     -- index,
     -- maybeIndex,
 
-    -- -- * Creating
-    -- generate,
-    -- convert,
+    -- * Creating
+    generate,
+    convert,
 
     -- -- * Mathematical operations
     -- add,
@@ -28,211 +33,117 @@ module Math.FTensor.General (
     -- changeBasisAll,
 ) where
 
--- import Data.Foldable (foldl')
--- import Data.Proxy
+import Data.Proxy
 import GHC.Exts (IsList(..))
 import GHC.TypeLits
 
 import Math.FTensor.Lib.Array hiding (generate, convert, index)
 import Math.FTensor.Lib.General
+import Math.FTensor.Lib.TypeList
 import Math.FTensor.Internal.TaggedList
--- import Math.FTensor.SizedList
--- import qualified Math.FTensor.Lib.Array as A
+import Math.FTensor.SizedList
+import qualified Math.FTensor.Lib.Array as A
 import qualified Math.FTensor.Internal.Check
 
 #include "ftensor.h"
 
 -- * Types
 
-class
-    ( Array (ArrayT t e) (MutableArrayT t e)
-    , Item (ArrayT t e) ~ e
+type TensorBoxed (dims::[Nat]) e = Tensor ArrayBoxed dims e
+
+type TensorPrim (dims::[Nat]) e = Tensor ArrayPrim dims e
+
+-- * Indexing
+
+pIndex
+    :: forall a m e (dims::[Nat]) (multiIndex::[Nat]).
+    ( TensorC a m e
+    , InBounds dims multiIndex
+    , KnownNat (MultiIndexToI dims multiIndex)
     )
-    => Tensor t e where
+    => Tensor a dims e
+    -> Proxy multiIndex
+    -> e
+pIndex (Tensor arr) p = A.index arr (multiIndexToI' (Proxy::Proxy dims) p)
 
-    type ArrayT t e
-    type MutableArrayT t e :: * -> *
-    contents
-        :: (t dims e)
-        -> TensorContents dims (ArrayT t e) e
-    fromContents
-        :: TensorContents dims (ArrayT t e) e
-        -> (t dims e)
+unsafeIndex
+    :: forall a m e (dims::[Nat]).
+    ( TensorC a m e
+    , KnownType dims (SizedList (Length dims) Int)
+    )
+    => Tensor a dims e
+    -> SizedList (Length dims) Int
+    -> e
+unsafeIndex (Tensor arr) multiIndex =
+    UNSAFE_CHECK
+        (inBounds p multiIndex)
+        "unsafeIndex"
+        ((summon p)::SizedList (Length dims) Int, multiIndex)
+        $ A.index arr (multiIndexToI p multiIndex)
+    where
+      p :: Proxy dims
+      p = Proxy
 
-data TensorBoxed (dims::[Nat]) e where
-    ZeroBoxed :: !e -> TensorBoxed '[] e
-    PositiveBoxed :: {-# UNPACK #-} !(ArrayBoxed e) -> TensorBoxed (n ': ns) e
+index
+    :: forall a m e (dims::[Nat]).
+    ( TensorC a m e
+    , KnownType dims (SizedList (Length dims) Int)
+    )
+    => Tensor a dims e
+    -> SizedList (Length dims) Int
+    -> e
+index t multiIndex =
+    BOUNDS_CHECK
+        (inBounds p multiIndex)
+        "index"
+        ((summon p)::SizedList (Length dims) Int, multiIndex)
+        $ unsafeIndex t multiIndex
+    where
+      p :: Proxy dims
+      p = Proxy
 
-instance Functor (TensorBoxed dims) where
-    fmap f (ZeroBoxed x) = ZeroBoxed $ f x
-    fmap f (PositiveBoxed arr) = PositiveBoxed $ fmap f arr
+maybeIndex
+    :: forall a m e (dims::[Nat]).
+    ( TensorC a m e
+    , KnownType dims (SizedList (Length dims) Int)
+    )
+    => Tensor a dims e
+    -> SizedList (Length dims) Int
+    -> Maybe e
+maybeIndex t multiIndex
+  | inBounds (Proxy::Proxy dims) multiIndex = Just $ unsafeIndex t multiIndex
+  | otherwise = Nothing
 
-instance Foldable (TensorBoxed dims) where
-    foldr f init (ZeroBoxed x) = f x init
-    foldr f init (PositiveBoxed arr) = foldr f init arr
+-- * Creating
 
-instance Traversable (TensorBoxed dims) where
-    traverse f (ZeroBoxed x) = pure ZeroBoxed <*> (f x)
-    traverse f (PositiveBoxed arr) = pure PositiveBoxed <*> traverse f arr
+generate
+    :: forall a m e (dims::[Nat]) (multiIndices::[[Nat]]).
+    ( TensorC a m e
+    , multiIndices ~ AllMultiIndicesInBounds dims
+    , KnownType multiIndices [SizedList (Length dims) Int]
+    , KnownType (Product dims) Int
+    )
+    => Proxy dims
+    -> ((SizedList (Length dims) Int) -> e)
+    -> Tensor a dims e
+generate _ f = Tensor $ fromListN len (fmap f lists)
+  where
+    len :: Int
+    len = summon (Proxy::Proxy (Product dims))
+    lists :: [SizedList (Length dims) Int]
+    lists = summon (Proxy::Proxy multiIndices)
 
-instance TensorIsListConstraint d ds e
-    => IsList (TensorBoxed (d ': ds) e) where
+{-# INLINE[1] convert #-}
+convert :: (TensorC a m e, TensorC b n e) => Tensor a dims e -> Tensor b dims e
+convert (Tensor arr) = Tensor $ A.convert arr
 
-    type Item (TensorBoxed (d ': ds) e) = IsListItem (d ': ds) e
+{-# RULES "convert/id" convert = id #-}
 
-    {-# INLINE fromList #-}
-    fromList = fromContents . fromList
+-- -- -- * Mathematical operations
 
-    {-# INLINE fromListN #-}
-    fromListN = \i lst -> fromContents $ fromListN i lst
-
-    {-# INLINE toList #-}
-    toList = toList . contents
-
-instance Tensor TensorBoxed e where
-    type ArrayT TensorBoxed e = ArrayBoxed e
-    type MutableArrayT TensorBoxed e = MutableArrayBoxed e
-
-    {-# INLINE contents #-}
-    contents (ZeroBoxed x) = Zero x
-    contents (PositiveBoxed arr) = Positive arr
-
-    {-# INLINE fromContents #-}
-    fromContents (Zero x) = ZeroBoxed x
-    fromContents (Positive arr) = PositiveBoxed arr
-
--- instance TensorIsListConstraint dim slotCount scm1 e
---     => IsList (TensorBoxed dim slotCount e) where
-
---     type Item (TensorBoxed dim slotCount e) = IsListContents dim slotCount e
-
---     {-# INLINE fromList #-}
---     fromList = fromContents . fromList
-
---     {-# INLINE fromListN #-}
---     fromListN = \i lst -> fromContents $ fromListN i lst
-
---     {-# INLINE toList #-}
---     toList = toList . contents
-
--- instance Tensor TensorBoxed e where
---     type ArrayT TensorBoxed e = ArrayBoxed e
---     type MutableArrayT TensorBoxed e = MutableArrayBoxed e
-
---     {-# INLINE contents #-}
---     contents (ZeroBoxed x) = Zero x
---     contents (PositiveBoxed arr) = Positive arr
-
---     {-# INLINE fromContents #-}
---     fromContents (Zero x) = ZeroBoxed x
---     fromContents (Positive arr) = PositiveBoxed arr
-
--- data TensorPrim (dim::Nat) (slotCount::Nat)  e where
---     ZeroPrim :: !e -> TensorPrim dim 0 e
---     PositivePrim :: {-# UNPACK #-} !(ArrayPrim e) -> TensorPrim dim (n+1) e
-
--- instance (TensorIsListConstraint dim slotCount scm1 e, Prim e)
---     => IsList (TensorPrim dim slotCount e) where
-
---     type Item (TensorPrim dim slotCount e) =
---         IsListContents dim slotCount e
-
---     {-# INLINE fromList #-}
---     fromList = fromContents . fromList
-
---     {-# INLINE fromListN #-}
---     fromListN i lst = fromContents $ fromListN i lst
-
---     {-# INLINE toList #-}
---     toList = toList . contents
-
--- instance Prim e => Tensor TensorPrim e where
---     type ArrayT TensorPrim e = ArrayPrim e
---     type MutableArrayT TensorPrim e = MutableArrayPrim e
-
---     {-# INLINE contents #-}
---     contents (ZeroPrim x) = Zero x
---     contents (PositivePrim arr) = Positive arr
-
---     {-# INLINE fromContents #-}
---     fromContents (Zero x) = ZeroPrim x
---     fromContents (Positive arr) = PositivePrim arr
-
--- -- * Indexing
-
--- type MultiIndex (slotCount::Nat) = SizedList slotCount Int
-
--- inBounds :: Int -> MultiIndex slotCount -> Bool
--- inBounds _ N = True
--- inBounds dim (i:-is)
---   | i >= 0 && i < dim = inBounds dim is
---   | otherwise = False
-
--- multiIndexToI :: Int -> MultiIndex slotCount -> Int
--- multiIndexToI dim multiIndex = foldl' f 0 multiIndex
---   where
---     f accum new = dim*accum + new
-
--- unsafeIndex
---     :: forall t e dim slotCount
---     . (Tensor t e, KnownNat dim)
---     => t dim slotCount e
---     -> MultiIndex slotCount
---     -> e
--- unsafeIndex t multiIndex = case contents t of
---     Zero x -> x
---     Positive arr -> UNSAFE_CHECK
---         (inBounds dim' multiIndex)
---         "unsafeIndex"
---         (dim', multiIndex)
---         A.index arr (multiIndexToI dim' multiIndex)
---   where
---     dim' :: Int
---     dim' = fromInteger . natVal $ (Proxy::Proxy dim)
-
--- index
---     :: forall t e dim slotCount
---     . (Tensor t e, KnownNat dim)
---     => t dim slotCount e
---     -> MultiIndex slotCount
---     -> e
--- index t multiIndex = BOUNDS_CHECK
---     (inBounds dim' multiIndex)
---     "index"
---     (dim', multiIndex)
---     $ unsafeIndex t multiIndex
---   where
---     dim' = fromInteger . natVal $ (Proxy::Proxy dim)
-
--- maybeIndex
---     :: forall t e dim slotCount
---     . (Tensor t e, KnownNat dim)
---     => t dim slotCount e
---     -> MultiIndex slotCount
---     -> Maybe e
--- maybeIndex t multiIndex
---   | inBounds dim' multiIndex = Just $ unsafeIndex t multiIndex
---   | otherwise = Nothing
---   where
---     dim' = fromInteger . natVal $ (Proxy::Proxy dim)
-
--- -- * Creating
-
-generate = undefined
-
--- {-# INLINE[1] convert #-}
--- convert :: (Tensor t e, Tensor u e) => t dim slotCount e -> u dim slotCount e
--- convert t = fromContents $ case contents t of
---     Positive arr -> Positive $ A.convert arr
---     Zero x -> Zero x
-
--- {-# RULES "convert/id" convert = id #-}
-
--- -- * Mathematical operations
-
--- add = undefined
--- tensorProduct = undefined
--- unsafeContract = undefined
--- contract = undefined
--- changeBasis = undefined
--- changeBasisAll = undefined
+-- -- add = undefined
+-- -- tensorProduct = undefined
+-- -- unsafeContract = undefined
+-- -- contract = undefined
+-- -- changeBasis = undefined
+-- -- changeBasisAll = undefined
