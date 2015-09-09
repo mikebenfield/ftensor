@@ -9,7 +9,7 @@ module Math.FTensor.Lib.TypeList (
     Snd,
 
     -- * List operations
-    --('++),
+    Acc,
     Append,
     Concat,
     Length,
@@ -52,6 +52,10 @@ type family Snd (x :: (k1, k2)) :: k1 where
 type family (!!) (list::[k]) (n::Nat) :: k where
     (!!) (x ': xs) 0 = x
     (!!) (x ': xs) n = (!!) xs (n-1)
+
+type family (Acc) (list::[k]) (n::Nat) :: k where
+    (Acc) (x ': xs) 0 = x
+    (Acc) (x ': xs) n = (Acc) xs (n-1)
 
 type family (++) (lhs::[k]) (rhs::[k]) :: [k] where
     (++) '[] rhs = rhs

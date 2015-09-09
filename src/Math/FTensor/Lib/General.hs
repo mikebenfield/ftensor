@@ -21,6 +21,8 @@ import Data.STRef
 import GHC.Exts (IsList(..), Constraint)
 import GHC.TypeLits
 
+import Control.DeepSeq
+
 import Math.FTensor.Internal.TaggedList
 import Math.FTensor.Lib.Array
 import Math.FTensor.SizedList
@@ -32,6 +34,9 @@ type TensorC a m e = (Array (a e) m, Item (a e) ~ e)
 
 deriving instance Eq (a e) => Eq (Tensor a dims e)
 deriving instance Show (a e) => Show (Tensor a dims e) -- XXX temporary
+
+instance NFData (a e) => NFData (Tensor a dims e) where
+    rnf (Tensor arr) = rnf arr
 
 instance Functor a => Functor (Tensor a dims) where
     {-# INLINE fmap #-}

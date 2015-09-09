@@ -21,6 +21,7 @@ import Data.Proxy
 import Data.STRef
 import GHC.Exts (Int(..), sizeofArray#, sizeofMutableArray#, IsList(..))
 
+import Control.DeepSeq
 import Data.Primitive.Types (Prim(..))
 import qualified Data.Primitive.Array as A
 import qualified Data.Primitive.ByteArray as BA
@@ -63,6 +64,9 @@ arrayEq lhs rhs = len == length rhs && all f [0..len-1]
 newtype ArrayPrim e = ArrayPrim BA.ByteArray
 
 newtype MutableArrayPrim e s = MutableArrayPrim (BA.MutableByteArray s)
+
+instance NFData (ArrayPrim e) where
+    rnf _ = rnf ()
 
 instance (Eq e, Prim e) => Eq (ArrayPrim e) where
     (==) = arrayEq
@@ -120,6 +124,9 @@ newtype ArrayBoxed e = ArrayBoxed (A.Array e)
 
 instance Eq e => Eq (ArrayBoxed e) where
     (==) = arrayEq
+
+instance NFData e => NFData (ArrayBoxed e) where
+    rnf arr = foldr (\j () -> rnf j) () arr
 
 instance Show e => Show (ArrayBoxed e) where
     show arr = "fromList " ++ show (toList arr)
