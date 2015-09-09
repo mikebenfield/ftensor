@@ -30,6 +30,7 @@ module Math.FTensor.General (
     add,
     tensorProduct,
     contract,
+    trace,
     -- changeBasis,
     -- changeBasisAll,
 ) where
@@ -241,6 +242,19 @@ type family Offsets (dims::[Nat]) :: [Nat] where
 type family Offsets_ (dims::[Nat]) :: [Nat] where
     Offsets_ '[] = '[1]
     Offsets_ (dim ': dims) = (dim * Head (Offsets_ dims)) ': Offsets_ dims
+
+trace
+    :: forall a m e (dim::Nat)
+    . (KnownType dim Int, TensorC a m e, Num e)
+    => Tensor a '[dim, dim] e
+    -> e
+trace (Tensor arr) = f 0 0
+  where
+    f !i !sum
+      | i < len = f (i + dim1) (sum + A.index arr i)
+      | otherwise = sum
+    len = A.length arr
+    dim1 = 1 + summon (Proxy::Proxy dim)
 
 -- changeBasis = undefined
 -- changeBasisAll = undefined

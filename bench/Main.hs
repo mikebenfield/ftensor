@@ -24,23 +24,30 @@ v333 = convert u333
 uBig :: TensorPrim '[2,2,2,2,2,2,2,2,2,2] Int
 uBig = Tensor (fromList [1..2^(10::Int)])
 
-vBig :: TensorV Int 2
-vBig = convert uBig
+vMat :: TensorBoxed '[10,10] Int
+vMat = Tensor (fromList [1..100])
+
+uMat :: TensorPrim '[10,10] Int
+uMat = convert vMat
 
 main = defaultMain
-    [ bgroup "indexing"
-        [ bench "index" $ nf (index u333) (2:-1:-2:-N)
-        , bench "unsafeIndex" $ nf (unsafeIndex u333) (2:-1:-2:-N)
-        , bench "pIndex" $ nf (pIndex u333) (Proxy::Proxy '[2,1,2])
-        , bench "index (boxed)" $ nf (index v333) (2:-1:-2:-N)
-        , bench "unsafeIndex (boxed)" $ nf (unsafeIndex v333) (2:-1:-2:-N)
-        , bench "pIndex (boxed)" $ nf (pIndex v333) (Proxy::Proxy '[2,1,2])
-        , bench "index uBig" $ nf (index uBig)
-            (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
-        , bench "unsafeIndex uBig" $ nf (unsafeIndex uBig)
-            (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
-        , bench "pIndex uBig" $ nf (pIndex uBig)
-            (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
+    [ bgroup "trace"
+        [ bench "trace uMat" $ nf trace uMat
+        , bench "trace vMat" $ nf trace vMat
         ]
+    -- , bgroup "indexing"
+    --     [ bench "index" $ nf (index u333) (2:-1:-2:-N)
+    --     , bench "unsafeIndex" $ nf (unsafeIndex u333) (2:-1:-2:-N)
+    --     , bench "pIndex" $ nf (pIndex u333) (Proxy::Proxy '[2,1,2])
+    --     , bench "index (boxed)" $ nf (index v333) (2:-1:-2:-N)
+    --     , bench "unsafeIndex (boxed)" $ nf (unsafeIndex v333) (2:-1:-2:-N)
+    --     , bench "pIndex (boxed)" $ nf (pIndex v333) (Proxy::Proxy '[2,1,2])
+    --     , bench "index uBig" $ nf (index uBig)
+    --         (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
+    --     , bench "unsafeIndex uBig" $ nf (unsafeIndex uBig)
+    --         (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
+    --     , bench "pIndex uBig" $ nf (pIndex uBig)
+    --         (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
+    --     ]
     ]
 

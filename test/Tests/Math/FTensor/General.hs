@@ -11,7 +11,7 @@
 module Tests.Math.FTensor.General (
     tests
 ) where
-import Debug.Trace -- XXX
+import qualified Debug.Trace as D
 import Data.Proxy
 import GHC.Exts (IsList(..))
 
@@ -165,6 +165,16 @@ instance (Monad m) => Serial m T2 where
         f :: Int -> Int -> T2
         f i j = T2 $ fromList [i, j]
 
+newtype T22 = T22 (TensorBoxed '[2,2] Int)
+    deriving (Show, Eq)
+
+instance (Monad m) => Serial m T22 where
+    series = cons4 f
+      where
+        f :: Int -> Int -> Int -> Int -> T22
+        f i j k l = T22 $ fromList [[i, j], [k,l]]
+
+
 smallCheckProperties = testGroup "SmallCheck"
     [ SC.testProperty "scalar . tensor" $
         \(i::Int) ->
@@ -187,4 +197,7 @@ smallCheckProperties = testGroup "SmallCheck"
                   , index t1 (1:-N) * index t2 (1:-N)
                   ]
                 ]
+    , SC.testProperty "contract / trace" $
+        \(T22 t) ->
+            trace t == scalar (contract t (Proxy::Proxy 0) (Proxy::Proxy 1))
     ]
