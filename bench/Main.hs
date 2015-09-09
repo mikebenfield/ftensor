@@ -10,6 +10,7 @@ import Criterion.Main
 import Math.FTensor.General
 import Math.FTensor.Lib.General
 import Math.FTensor.SizedList
+import qualified Math.FTensor.Lib.Array as A
 
 u333 :: TensorPrim '[3,3,3] Int
 u333 = fromList
@@ -23,11 +24,11 @@ v333 = convert u333
 uBig :: TensorPrim '[2,2,2,2,2,2,2,2,2,2] Int
 uBig = Tensor (fromList [1..2^(10::Int)])
 
--- vBig :: TensorV Int 2
--- vBig = convert uBig
+vBig :: TensorV Int 2
+vBig = convert uBig
 
 main = defaultMain
-    [ bgroup "tensorProduct"
+    [ bgroup "indexing"
         [ bench "index" $ nf (index u333) (2:-1:-2:-N)
         , bench "unsafeIndex" $ nf (unsafeIndex u333) (2:-1:-2:-N)
         , bench "pIndex" $ nf (pIndex u333) (Proxy::Proxy '[2,1,2])
@@ -40,29 +41,6 @@ main = defaultMain
             (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
         , bench "pIndex uBig" $ nf (pIndex uBig)
             (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
-        -- , bench "u0 u0 2" $ nf (tensorProduct2 u0) u0
-        -- , bench "u0 u0 3" $ nf (tensorProduct3 u0) u0
-        -- , bench "v0 v0 1" $ nf (tensorProduct v0) v0
-        -- , bench "v0 v0 2" $ nf (tensorProduct2 v0) v0
-        -- , bench "v0 v0 3" $ nf (tensorProduct3 v0) v0
-        -- , bench "u333 u0 1" $ nf (tensorProduct u333) u0
-        -- , bench "u333 u0 2" $ nf (tensorProduct2 u333) u0
-        -- , bench "u333 u0 3" $ nf (tensorProduct3 u333) u0
-        -- , bench "v333 v0 1" $ nf (tensorProduct v333) v0
-        -- , bench "v333 v0 2" $ nf (tensorProduct2 v333) v0
-        -- , bench "v333 v0 3" $ nf (tensorProduct3 v333) v0
-        -- , bench "u333 u333 1" $ nf (tensorProduct u333) u333
-        -- , bench "u333 u333 2" $ nf (tensorProduct2 u333) u333
-        -- , bench "u333 u333 3" $ nf (tensorProduct3 u333) u333
-        -- , bench "v333 v333 1" $ nf (tensorProduct v333) v333
-        -- , bench "v333 v333 2" $ nf (tensorProduct2 v333) v333
-        -- , bench "v333 v333 3" $ nf (tensorProduct3 v333) v333
-        -- , bench "uBig uBig 1" $ nf (tensorProduct uBig) uBig
-        -- , bench "uBig uBig 2" $ nf (tensorProduct2 uBig) uBig
-        -- , bench "uBig uBig 3" $ nf (tensorProduct3 uBig) uBig
-        -- , bench "vBig vBig 1" $ nf (tensorProduct vBig) vBig
-        -- , bench "vBig vBig 2" $ nf (tensorProduct2 vBig) vBig
-        -- , bench "vBig vBig 3" $ nf (tensorProduct3 vBig) vBig
         ]
     ]
 

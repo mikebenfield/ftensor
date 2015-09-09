@@ -1,5 +1,8 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-} -- for IsList
@@ -29,26 +32,14 @@ import Math.FTensor.SizedList
 import Math.FTensor.Lib.TypeList
 
 newtype Tensor a (dims::[Nat]) e = Tensor (a e)
+  deriving (Eq, Show, Functor, Traversable, Foldable)
 
 type TensorC a m e = (Array (a e) m, Item (a e) ~ e)
 
-deriving instance Eq (a e) => Eq (Tensor a dims e)
-deriving instance Show (a e) => Show (Tensor a dims e) -- XXX temporary
+--deriving instance Show (a e) => Show (Tensor a dims e) -- XXX temporary
 
 instance NFData (a e) => NFData (Tensor a dims e) where
     rnf (Tensor arr) = rnf arr
-
-instance Functor a => Functor (Tensor a dims) where
-    {-# INLINE fmap #-}
-    fmap f (Tensor arr) = Tensor $ fmap f arr
-
-instance Foldable a => Foldable (Tensor a dims) where
-    {-# INLINE foldr #-}
-    foldr f init (Tensor arr) = foldr f init arr
-
-instance Traversable a => Traversable (Tensor a dims) where
-    {-# INLINE traverse #-}
-    traverse f (Tensor arr) = pure Tensor <*> traverse f arr
 
 instance
     ( dims ~ (d ': ds)

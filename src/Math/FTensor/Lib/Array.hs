@@ -7,10 +7,10 @@ module Math.FTensor.Lib.Array (
     index,
     read,
     write,
-    ArrayPrim(..),
-    ArrayBoxed(..),
-    MutableArrayPrim(..),
-    MutableArrayBoxed(..),
+    ArrayPrim,
+    ArrayBoxed,
+    MutableArrayPrim,
+    MutableArrayBoxed,
     Prim(..),
     generate,
     unfoldN,
@@ -22,8 +22,8 @@ module Math.FTensor.Lib.Array (
 import Prelude hiding (length, read)
 import qualified Prelude
 
+import Control.Monad (liftM)
 import Control.Monad.ST (ST, runST)
-import Data.Proxy
 import Data.STRef
 import GHC.Exts (Int(..), sizeofArray#, sizeofMutableArray#, IsList(..))
 
@@ -101,7 +101,7 @@ newtype ArrayPrim e = ArrayPrim BA.ByteArray
 newtype MutableArrayPrim e s = MutableArrayPrim (BA.MutableByteArray s)
 
 instance NFData (ArrayPrim e) where
-    rnf _ = rnf ()
+    rnf (ArrayPrim a) = a `seq` ()
 
 instance (Eq e, Prim e) => Eq (ArrayPrim e) where
     (==) = arrayEq
@@ -124,9 +124,8 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
         div (BA.sizeofByteArray ba) $ I# (sizeOf# (undefined :: e))
 
     {-# INLINE new #-}
-    new = \i -> do
-        ba <- BA.newByteArray (i * I# (sizeOf# (undefined::e)))
-        return $ MutableArrayPrim ba
+    new = \i ->
+        MutableArrayPrim <$> BA.newByteArray (i * I# (sizeOf# (undefined::e)))
 
     {-# INLINE mLength #-}
     mLength = \(MutableArrayPrim mba) -> BA.sizeofMutableByteArray mba
@@ -151,7 +150,7 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
 
     {-# INLINE freeze #-}
     freeze = \(MutableArrayPrim mba) ->
-        BA.unsafeFreezeByteArray mba >>= return . ArrayPrim
+        liftM ArrayPrim $ BA.unsafeFreezeByteArray mba
 
 newtype MutableArrayBoxed a s = MutableArrayBoxed (A.MutableArray s a)
 
@@ -161,7 +160,12 @@ instance Eq e => Eq (ArrayBoxed e) where
     (==) = arrayEq
 
 instance NFData e => NFData (ArrayBoxed e) where
-    rnf arr = foldr (\j () -> rnf j) () arr
+    rnf arr = f 0
+      where
+        len = length arr
+        f i
+          | i < len = rnf (index arr i) `seq` f (i+1)
+          | otherwise = ()
 
 instance Show e => Show (ArrayBoxed e) where
     show arr = "fromList " ++ show (toList arr)
@@ -194,9 +198,8 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     length = \(ArrayBoxed (A.Array x)) -> I# (sizeofArray# x)
 
     {-# INLINE new #-}
-    new = \i -> do
-        ma <- A.newArray i undefined
-        return $ MutableArrayBoxed ma
+    new = \i ->
+        MutableArrayBoxed <$> A.newArray i undefined
 
     {-# INLINE mLength #-}
     mLength = \(MutableArrayBoxed (A.MutableArray ma)) ->
@@ -217,13 +220,13 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
 
     {-# INLINE freeze #-}
     freeze = \(MutableArrayBoxed ma) ->
-        A.unsafeFreezeArray ma >>= return . ArrayBoxed
+        liftM ArrayBoxed $ A.unsafeFreezeArray ma
 
 generate :: Array a m => Int -> (Int -> Item a) -> a
 generate len f = runST $ do
     newArr <- new len
     let at = \i -> write newArr i (f i)
-    sequence_ $ map at [0..len-1]
+    mapM_ at [0..len-1]
     freeze newArr
 
 unfoldN :: Array a m => Int -> (b -> (Item a, b)) -> b -> a
@@ -235,7 +238,7 @@ unfoldN len f init = runST $ do
          let (elem, newB) = f oldB
          writeSTRef ref newB
          write newArr i elem
-    sequence_ $ map at [0..len-1]
+    mapM_  at [0..len-1]
     freeze newArr
 
 {-# INLINE[1] convert #-}

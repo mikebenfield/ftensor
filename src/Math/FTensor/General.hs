@@ -175,7 +175,7 @@ tensorProduct
     )
     => Tensor a ds1 e
     -> Tensor a ds2 e
-    -> Tensor a (Append ds1 ds2) e
+    -> Tensor a (ds1 ++ ds2) e
 tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
     newArr <- A.new newLen
     let oneRow = \i ->
@@ -208,13 +208,13 @@ contract
         (newLen::Nat) (iOffset::Nat) (jOffset::Nat) (othersOffset::Nat).
     ( i+1 <= j
     , j+1 <= Length dims
-    , Acc dims i ~ Acc dims j
+    , (dims !! i) ~ (dims !! j)
     , newDims ~ ContractedDims dims i j
     , newLen ~ Product newDims
     , othersOffset ~ (Sum (Offsets dims) - iOffset - jOffset)
     , iOffset ~ (Product (Drop (i+1) dims))
     , jOffset ~ (Product (Drop (j+1) dims))
-    , KnownType (Acc dims i) Int
+    , KnownType (dims !! i) Int
     , KnownType (iOffset+jOffset) Int
     , KnownType newLen Int
     , KnownType othersOffset Int
@@ -227,7 +227,7 @@ contract
     -> Tensor a newDims e
 contract (Tensor arr) _ _ = Tensor $ contract_ arr
     (summon (Proxy::Proxy newLen))
-    (summon (Proxy::Proxy (Acc dims i)))
+    (summon (Proxy::Proxy (dims !! i)))
     (summon (Proxy::Proxy (iOffset+jOffset)))
     (summon (Proxy::Proxy othersOffset))
 
