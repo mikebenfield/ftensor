@@ -30,15 +30,24 @@ vMat = Tensor (fromList [1..100])
 uMat :: TensorPrim '[10,10] Int
 uMat = convert vMat
 
+cont :: TensorPrim '[10, 10] Int -> TensorPrim '[] Int
+cont t = contract t (Proxy::Proxy 0) (Proxy:: Proxy 1)
+
+pInd :: TensorPrim '[3,3,3] Int -> Int
+pInd t = pIndex t (Proxy::Proxy '[2,1,2])
+
 main = defaultMain
     [ bgroup "trace"
         [ bench "trace uMat" $ nf trace uMat
         , bench "trace vMat" $ nf trace vMat
         ]
-    -- , bgroup "indexing"
-    --     [ bench "index" $ nf (index u333) (2:-1:-2:-N)
-    --     , bench "unsafeIndex" $ nf (unsafeIndex u333) (2:-1:-2:-N)
-    --     , bench "pIndex" $ nf (pIndex u333) (Proxy::Proxy '[2,1,2])
+    , bgroup "contract"
+        [ bench "contract uMat" $ nf cont uMat
+        ]
+    , bgroup "indexing"
+        [ bench "index" $ nf (index u333) (2:-1:-2:-N)
+        , bench "unsafeIndex" $ nf (unsafeIndex u333) (2:-1:-2:-N)
+        , bench "pIndex" $ nf pInd u333
     --     , bench "index (boxed)" $ nf (index v333) (2:-1:-2:-N)
     --     , bench "unsafeIndex (boxed)" $ nf (unsafeIndex v333) (2:-1:-2:-N)
     --     , bench "pIndex (boxed)" $ nf (pIndex v333) (Proxy::Proxy '[2,1,2])
@@ -48,6 +57,6 @@ main = defaultMain
     --         (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
     --     , bench "pIndex uBig" $ nf (pIndex uBig)
     --         (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
-    --     ]
+        ]
     ]
 

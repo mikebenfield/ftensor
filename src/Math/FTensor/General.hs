@@ -202,7 +202,12 @@ contract_ arr length iDim ijOffset othersOffset =
     A.generate length (sumStartingAt . (*othersOffset))
   where
     sumStartingAt i =
-        sum $ fmap (A.index arr) [i, i+ijOffset .. i + ijOffset*iDim - 1]
+        let max = i + ijOffset*iDim
+            f !i !sum
+              | i < max = f (i+ijOffset) (sum + A.index arr i)
+              | otherwise = sum
+        in
+        f i 0
 
 contract
     :: forall a m e (dims::[Nat]) (i::Nat) (j::Nat) (newDims::[Nat])
@@ -231,6 +236,7 @@ contract (Tensor arr) _ _ = Tensor $ contract_ arr
     (summon (Proxy::Proxy (dims !! i)))
     (summon (Proxy::Proxy (iOffset+jOffset)))
     (summon (Proxy::Proxy othersOffset))
+
 
 type family ContractedDims (xs::[Nat]) (i::Nat) (j::Nat) :: [Nat] where
     ContractedDims xs i j = Delete (Delete xs j) i
