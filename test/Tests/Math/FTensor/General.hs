@@ -52,6 +52,9 @@ m1 = [[1,2,3], [4,5,6], [7,8,9]]
 case_m1 = case m1 of
     Tensor arr -> arr @?= fromList [1::Int,2,3,4,5,6,7,8,9]
 
+case_contract_1 =
+    contract m1 (Proxy::Proxy 0) (Proxy::Proxy 1) @?= tensor 15
+
 case_pIndex_4 = pIndex m1 (Proxy::Proxy '[0,0]) @?= 1
 case_index_4 = index m1 (0:-0:-N) @?= 1
 case_pIndex_5 = pIndex m1 (Proxy::Proxy '[0,1]) @?= 2
@@ -138,6 +141,14 @@ case_generate_1 =
     in
     case v2 of
         Tensor arr -> arr @?= fromList [0,1,2,3]
+
+t2 :: TensorBoxed '[2,3,2] Int
+t2 = [ [ [0, 1], [2, 3], [4, 5] ]
+     , [ [6, 7], [8, 9], [10, 11] ]
+     ]
+
+case_contract_2 =
+    contract t2 (Proxy::Proxy 0) (Proxy::Proxy 2) @?= [7, 11, 15]
 
 newtype T0 = T0 (TensorBoxed '[] Int)
     deriving (Show, Eq)

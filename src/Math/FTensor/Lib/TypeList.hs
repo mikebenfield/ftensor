@@ -13,6 +13,7 @@ module Math.FTensor.Lib.TypeList (
     Append,
     Concat,
     Length,
+    Delete,
     Head,
     Tail,
     Reverse,
@@ -72,6 +73,10 @@ type family Concat (args::[[k]]) :: [k] where
 type family Length (x::[k]) :: Nat where
     Length '[] = 0
     Length (x ': xs) = 1 + Length xs
+
+type family Delete (xs::[k]) (n::Nat) :: [k] where
+    Delete (x ': xs) 0 = xs
+    Delete (x ': xs) n = x ': Delete xs (n-1)
 
 type family Head (x::[k]) :: k where
     Head (x ': xs) = x

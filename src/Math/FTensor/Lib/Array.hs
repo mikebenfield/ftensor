@@ -1,8 +1,12 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MagicHash #-}
 
 module Math.FTensor.Lib.Array (
     Array(..),
+    index,
+    read,
+    write,
     ArrayPrim(..),
     ArrayBoxed(..),
     MutableArrayPrim(..),
@@ -13,7 +17,9 @@ module Math.FTensor.Lib.Array (
     convert,
 ) where
 
-import Prelude hiding (length)
+#include "ftensor.h"
+
+import Prelude hiding (length, read)
 import qualified Prelude
 
 import Control.Monad.ST (ST, runST)
@@ -26,17 +32,46 @@ import Data.Primitive.Types (Prim(..))
 import qualified Data.Primitive.Array as A
 import qualified Data.Primitive.ByteArray as BA
 
+import Math.FTensor.Internal.Check
+
 class (IsList a) => Array a m | a -> m, m -> a where
-    index :: a -> Int -> Item a
+    basicIndex :: a -> Int -> Item a
     length :: a -> Int
 
     new :: Int -> ST s (m s)
     mLength :: m s -> Int
-    read :: m s -> Int -> ST s (Item a)
-    write :: m s -> Int -> Item a -> ST s ()
+    basicRead :: m s -> Int -> ST s (Item a)
+    basicWrite :: m s -> Int -> Item a -> ST s ()
     copy :: m s -> Int -> a -> Int -> Int -> ST s ()
     copyM :: m s -> Int -> m s -> Int -> Int -> ST s ()
     freeze :: m s -> ST s a
+
+{-# INLINE index #-}
+index :: Array a m => a -> Int -> Item a
+index = \a i ->
+    UNSAFE_CHECK
+        (0 <= i && i < length a)
+        "index"
+        (i, length a)
+        $ basicIndex a i
+
+{-# INLINE read #-}
+read :: Array a m => m s -> Int -> ST s (Item a)
+read = \m i ->
+    UNSAFE_CHECK
+        (0 <= i && i < mLength m)
+        "read"
+        (i, mLength m)
+        $ basicRead m i
+
+{-# INLINE write #-}
+write :: Array a m => m s -> Int -> Item a -> ST s ()
+write = \m i x ->
+    UNSAFE_CHECK
+        (0 <= i && i < mLength m)
+        "write"
+        (i, mLength m)
+        $ basicWrite m i x
 
 arrayFromList :: Array a m => [Item a] -> a
 arrayFromList lst = arrayFromListN (Prelude.length lst) lst
@@ -81,8 +116,8 @@ instance Prim e => IsList (ArrayPrim e) where
     toList = arrayToList
 
 instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
-    {-# INLINE index #-}
-    index = \(ArrayPrim ba) i -> BA.indexByteArray ba i
+    {-# INLINE basicIndex #-}
+    basicIndex = \(ArrayPrim ba) i -> BA.indexByteArray ba i
 
     {-# INLINE length #-}
     length = \(ArrayPrim ba) -> 
@@ -96,11 +131,11 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
     {-# INLINE mLength #-}
     mLength = \(MutableArrayPrim mba) -> BA.sizeofMutableByteArray mba
 
-    {-# INLINE read #-}
-    read = \(MutableArrayPrim mba) -> BA.readByteArray mba
+    {-# INLINE basicRead #-}
+    basicRead = \(MutableArrayPrim mba) -> BA.readByteArray mba
 
-    {-# INLINE write #-}
-    write = \(MutableArrayPrim mba) -> BA.writeByteArray mba
+    {-# INLINE basicWrite #-}
+    basicWrite = \(MutableArrayPrim mba) -> BA.writeByteArray mba
 
     {-# INLINE copy #-}
     copy = \(MutableArrayPrim mba) i (ArrayPrim ba) j k ->
@@ -151,8 +186,8 @@ instance Functor ArrayBoxed where
     fmap f array = generate (length array) (f . index array)
 
 instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
-    {-# INLINE index #-}
-    index = \(ArrayBoxed a) -> A.indexArray a
+    {-# INLINE basicIndex #-}
+    basicIndex = \(ArrayBoxed a) -> A.indexArray a
 
     {-# INLINE length #-}
     -- for some reason Data.Primitive.Array doesn't expose a length function
@@ -167,11 +202,11 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     mLength = \(MutableArrayBoxed (A.MutableArray ma)) ->
         I# (sizeofMutableArray# ma)
 
-    {-# INLINE read #-}
-    read = \(MutableArrayBoxed ma) -> A.readArray ma
+    {-# INLINE basicRead #-}
+    basicRead = \(MutableArrayBoxed ma) -> A.readArray ma
 
-    {-# INLINE write #-}
-    write = \(MutableArrayBoxed ma) -> A.writeArray ma
+    {-# INLINE basicWrite #-}
+    basicWrite = \(MutableArrayBoxed ma) -> A.writeArray ma
 
     {-# INLINE copy #-}
     copy = \(MutableArrayBoxed ma) i (ArrayBoxed a) -> A.copyArray ma i a

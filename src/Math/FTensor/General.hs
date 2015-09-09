@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE UndecidableInstances #-} -- for ContractedDims
 
 module Math.FTensor.General (
     -- * Types
@@ -28,15 +29,14 @@ module Math.FTensor.General (
     -- * Mathematical operations
     add,
     tensorProduct,
-    -- unsafeContract,
-    -- contract,
+    contract,
     -- changeBasis,
     -- changeBasisAll,
 ) where
 
 import Control.Monad.ST (runST)
 import Data.Proxy
-import GHC.Exts (fromListN)
+import GHC.Exts (IsList(..))
 import GHC.TypeLits
 
 import Math.FTensor.Lib.Array hiding (generate, convert, index)
@@ -194,7 +194,53 @@ tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
     len2 :: Int
     len2 = summon (Proxy::Proxy (Product ds2))
 
--- -- unsafeContract = undefined
--- -- contract = undefined
--- -- changeBasis = undefined
--- -- changeBasisAll = undefined
+contract_
+    :: (Num (Item a), A.Array a m)
+    => a -> Int -> Int -> Int -> Int -> a
+contract_ arr length iDim ijOffset othersOffset =
+    A.generate length (sumStartingAt . (*othersOffset))
+  where
+    sumStartingAt i =
+        sum $ fmap (A.index arr) [i, i+ijOffset .. i + ijOffset*iDim - 1]
+
+contract
+    :: forall a m e (dims::[Nat]) (i::Nat) (j::Nat) (newDims::[Nat])
+        (newLen::Nat) (iOffset::Nat) (jOffset::Nat) (othersOffset::Nat).
+    ( i+1 <= j
+    , j+1 <= Length dims
+    , Acc dims i ~ Acc dims j
+    , newDims ~ ContractedDims dims i j
+    , newLen ~ Product newDims
+    , othersOffset ~ (Sum (Offsets dims) - iOffset - jOffset)
+    , iOffset ~ (Product (Drop (i+1) dims))
+    , jOffset ~ (Product (Drop (j+1) dims))
+    , KnownType (Acc dims i) Int
+    , KnownType (iOffset+jOffset) Int
+    , KnownType newLen Int
+    , KnownType othersOffset Int
+    , Num e
+    , TensorC a m e
+    )
+    => Tensor a dims e
+    -> Proxy i
+    -> Proxy j
+    -> Tensor a newDims e
+contract (Tensor arr) _ _ = Tensor $ contract_ arr
+    (summon (Proxy::Proxy newLen))
+    (summon (Proxy::Proxy (Acc dims i)))
+    (summon (Proxy::Proxy (iOffset+jOffset)))
+    (summon (Proxy::Proxy othersOffset))
+
+type family ContractedDims (xs::[Nat]) (i::Nat) (j::Nat) :: [Nat] where
+    ContractedDims xs i j = Delete (Delete xs j) i
+
+type family Offsets (dims::[Nat]) :: [Nat] where
+    Offsets '[] = '[1]
+    Offsets (dim ': dims) = Offsets_ dims
+
+type family Offsets_ (dims::[Nat]) :: [Nat] where
+    Offsets_ '[] = '[1]
+    Offsets_ (dim ': dims) = (dim * Head (Offsets_ dims)) ': Offsets_ dims
+
+-- changeBasis = undefined
+-- changeBasisAll = undefined
