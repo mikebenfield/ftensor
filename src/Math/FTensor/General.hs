@@ -27,10 +27,12 @@ module Math.FTensor.General (
     tensor,
 
     -- * Mathematical operations
+    scale,
     add,
     tensorProduct,
     contract,
     trace,
+    dot,
     -- changeBasis,
     -- changeBasisAll,
 ) where
@@ -153,6 +155,10 @@ tensor x = Tensor (A.generate 1 $ const x)
 
 -- * Mathematical operations
 
+scale :: (Num e, TensorC a m e) => Tensor a dims e -> e -> Tensor a dims e
+scale (Tensor arr) factor =
+    Tensor $ A.generate (A.length arr) ((*factor) . A.index arr)
+
 add
     :: (Num e, TensorC a m e)
     => Tensor a dims e
@@ -261,6 +267,20 @@ trace (Tensor arr) = f 0 0
       | otherwise = sum
     len = A.length arr
     dim1 = 1 + summon (Proxy::Proxy dim)
+
+dot :: (Num e, TensorC a m e) => Tensor a '[dim] e -> Tensor a '[dim] e -> e
+dot (Tensor arr1) (Tensor arr2) =
+    INTERNAL_CHECK
+        (len1 == len2)
+        "dot"
+        (len1, len2)
+        f 0 0
+  where
+    f !i !sum
+      | i < len1 = f (i+1) (sum + A.index arr1 i * A.index arr2 i)
+      | otherwise = sum
+    len1 = A.length arr1
+    len2 = A.length arr2
 
 -- changeBasis = undefined
 -- changeBasisAll = undefined
