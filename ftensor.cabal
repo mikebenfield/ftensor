@@ -26,6 +26,7 @@ flag InternalChecks
 
 library
   exposed-modules:
+    Math.FTensor.Algebra
     Math.FTensor.General
     Math.FTensor.Simple
     --Math.FTensor.Internal

@@ -48,15 +48,15 @@ main = defaultMain
         [ bench "index" $ nf (index u333) (2:-1:-2:-N)
         , bench "unsafeIndex" $ nf (unsafeIndex u333) (2:-1:-2:-N)
         , bench "pIndex" $ nf pInd u333
-    --     , bench "index (boxed)" $ nf (index v333) (2:-1:-2:-N)
-    --     , bench "unsafeIndex (boxed)" $ nf (unsafeIndex v333) (2:-1:-2:-N)
-    --     , bench "pIndex (boxed)" $ nf (pIndex v333) (Proxy::Proxy '[2,1,2])
-    --     , bench "index uBig" $ nf (index uBig)
-    --         (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
-    --     , bench "unsafeIndex uBig" $ nf (unsafeIndex uBig)
-    --         (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
-    --     , bench "pIndex uBig" $ nf (pIndex uBig)
-    --         (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
+        , bench "index (boxed)" $ nf (index v333) (2:-1:-2:-N)
+        , bench "unsafeIndex (boxed)" $ nf (unsafeIndex v333) (2:-1:-2:-N)
+        , bench "pIndex (boxed)" $ nf (pIndex v333) (Proxy::Proxy '[2,1,2])
+        , bench "index uBig" $ nf (index uBig)
+            (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
+        , bench "unsafeIndex uBig" $ nf (unsafeIndex uBig)
+            (0:-1:-0:-1:-0:-1:-0:-1:-0:-1:-N)
+        , bench "pIndex uBig" $ nf (pIndex uBig)
+            (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
         ]
     ]
 
