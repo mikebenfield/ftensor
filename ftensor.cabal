@@ -28,17 +28,13 @@ library
   exposed-modules:
     Math.FTensor.Algebra
     Math.FTensor.General
-    Math.FTensor.Simple
-    --Math.FTensor.Internal
     Math.FTensor.Lib.Array
     Math.FTensor.Lib.General
-    Math.FTensor.Lib.Simple
     Math.FTensor.Lib.TypeList
     Math.FTensor.Internal.Check
     Math.FTensor.Internal.TaggedList
     Math.FTensor.SizedList
   build-depends:       base >=4.8 && <4.9,
-                       --vector >=0.11,
                        primitive,
                        deepseq,
                        ghc-typelits-natnormalise
@@ -81,15 +77,13 @@ executable ftensor-test
                        tasty-smallcheck >=0.8,
                        tasty-th,
                        smallcheck,
-                       ftensor,
-                       vector
+                       ftensor
   main-is:             Main.hs
   hs-source-dirs:      test
   default-language:    Haskell2010
 
 executable ftensor-bench
   build-depends:       base >=4.8 && <4.9,
-                       vector,
                        ftensor,
                        criterion
   main-is:             Main.hs
