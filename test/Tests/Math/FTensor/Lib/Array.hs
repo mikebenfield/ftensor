@@ -11,7 +11,7 @@ module Tests.Math.FTensor.Lib.Array (
     tests
 ) where
 
-import Prelude hiding (length)
+import Prelude hiding (length, replicate)
 
 import Control.Monad.ST
 import GHC.Exts (IsList(..))
@@ -64,6 +64,18 @@ array4 = convert array3
 case_convert_4 = length array4 @?= 2
 case_convert_5 = index array4 0 @?= 100
 case_convert_6 = index array4 1 @?= 101
+
+case_replicate_1 =
+    let rep :: ArrayBoxed Int
+        rep = replicate 5 13
+    in
+    rep @?= [13,13,13,13,13]
+
+case_replicate_2 =
+    let rep :: ArrayPrim Int
+        rep = replicate 5 13
+    in
+    rep @?= [13,13,13,13,13]
 
 smallCheckProperties = testGroup "SmallCheck"
     [ SC.testProperty "toList . fromList (Array)" $

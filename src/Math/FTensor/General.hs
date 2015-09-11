@@ -1,10 +1,14 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE UndecidableInstances #-} -- for ContractedDims
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE UndecidableInstances #-} -- for ContractedDims, IsList
 
 module Math.FTensor.General (
     -- * Types
-    Tensor,
+    Tensor(..),
+    TensorC,
     TensorBoxed,
     TensorPrim,
 
@@ -29,6 +33,7 @@ module Math.FTensor.General (
     -- * Mathematical operations
     scale,
     add,
+    minus,
     tensorProduct,
     contract,
     trace,
@@ -40,8 +45,12 @@ module Math.FTensor.General (
 import Control.Monad.ST (runST)
 import Data.Proxy
 import GHC.Exts (IsList(..))
+import Data.STRef
 import GHC.TypeLits
 
+import Control.DeepSeq
+
+import Math.FTensor.Internal.TaggedList
 import Math.FTensor.Lib.Array hiding (generate, convert, index)
 import Math.FTensor.Lib.General
 import Math.FTensor.Lib.TypeList
@@ -49,9 +58,48 @@ import Math.FTensor.SizedList
 import qualified Math.FTensor.Lib.Array as A
 import qualified Math.FTensor.Internal.Check
 
+import Math.FTensor.Algebra
+
 #include "ftensor.h"
 
 -- * Types
+
+newtype Tensor a (dims::[Nat]) e = Tensor (a e)
+  deriving (Eq, Show, Functor, Traversable, Foldable)
+
+type TensorC a m e = (Array (a e) m, Item (a e) ~ e)
+
+instance NFData (a e) => NFData (Tensor a dims e) where
+    rnf (Tensor arr) = rnf arr
+
+instance
+    ( dims ~ (d ': ds)
+    , TensorC a m e
+    , IsList (TaggedList dims e)
+    , Item (TaggedList dims e) ~ IsListItem dims e
+    , KnownNat (Product dims)
+    )
+    => IsList (Tensor a dims e) where
+
+    type Item (Tensor a dims e) = IsListItem dims e
+
+    fromList lst = fromListN (Prelude.length lst) lst
+
+    fromListN len lst =
+        let arrayLen = natIntVal (Proxy::Proxy (Product dims))
+            (lst'::TaggedList dims e) = fromListN len lst
+        in
+        Tensor $ runST $ do
+            newArr <- new arrayLen
+            idx <- newSTRef (0::Int)
+            let at = \x -> do
+                 i <- readSTRef idx
+                 write newArr i x
+                 writeSTRef idx (i+1)
+            mapM_ at lst'
+            freeze newArr
+
+    toList = undefined
 
 type TensorBoxed (dims::[Nat]) e = Tensor ArrayBoxed dims e
 
@@ -155,12 +203,16 @@ tensor x = Tensor (A.generate 1 $ const x)
 
 -- * Mathematical operations
 
-scale :: (Num e, TensorC a m e) => Tensor a dims e -> e -> Tensor a dims e
+scale
+    :: (Multiplicative e, TensorC a m e)
+    => Tensor a dims e
+    -> e
+    -> Tensor a dims e
 scale (Tensor arr) factor =
-    Tensor $ A.generate (A.length arr) ((*factor) . A.index arr)
+    Tensor $ A.generate (A.length arr) ((*.factor) . A.index arr)
 
 add
-    :: (Num e, TensorC a m e)
+    :: (Additive e, TensorC a m e)
     => Tensor a dims e
     -> Tensor a dims e
     -> Tensor a dims e
@@ -171,12 +223,26 @@ add (Tensor arr1) (Tensor arr2) =
         (A.length arr1, A.length arr2)
         $ Tensor $ A.generate
             (A.length arr1)
-            (\i -> A.index arr1 i + A.index arr2 i)
+            (\i -> A.index arr1 i +. A.index arr2 i)
+
+minus
+    :: (WithNegatives e, TensorC a m e)
+    => Tensor a dims e
+    -> Tensor a dims e
+    -> Tensor a dims e
+minus (Tensor arr1) (Tensor arr2) =
+    INTERNAL_CHECK
+        (A.length arr1 == A.length arr2)
+        "minus"
+        (A.length arr1, A.length arr2)
+        $ Tensor $ A.generate
+            (A.length arr1)
+            (\i -> A.index arr1 i -. A.index arr2 i)
 
 tensorProduct
     :: forall a m e (ds1::[Nat]) (ds2::[Nat]).
     ( TensorC a m e
-    , Num e
+    , Multiplicative e
     , KnownType (Product ds1) Int
     , KnownType (Product ds2) Int
     )
@@ -190,7 +256,7 @@ tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
              i' = i*len2
          in
          mapM_
-            (\j -> A.write newArr (j+i') (x * A.index arr2 j))
+            (\j -> A.write newArr (j+i') (x *. A.index arr2 j))
             [0 .. len2-1]
     mapM_ oneRow [0..len1-1]
     freeze newArr
@@ -202,18 +268,15 @@ tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
     len2 = summon (Proxy::Proxy (Product ds2))
 
 contract_
-    :: (Num (Item a), A.Array a m)
+    :: (Additive (Item a), A.Array a m)
     => a -> Int -> Int -> Int -> Int -> a
 contract_ arr length iDim ijOffset othersOffset =
     A.generate length (sumStartingAt . (*othersOffset))
   where
-    sumStartingAt i =
-        let max = i + ijOffset*iDim
-            f !i !sum
-              | i < max = f (i+ijOffset) (sum + A.index arr i)
-              | otherwise = sum
-        in
-        f i 0
+    sumStartingAt i = f (i+ijOffset*iDim) (i+ijOffset) (A.index arr i)
+    f !max !idx !sum
+      | idx < max = f max (idx+ijOffset) (sum +. A.index arr idx)
+      | otherwise = sum
 
 contract
     :: forall a m e (dims::[Nat]) (i::Nat) (j::Nat) (newDims::[Nat])
@@ -230,7 +293,7 @@ contract
     , KnownType (iOffset+jOffset) Int
     , KnownType newLen Int
     , KnownType othersOffset Int
-    , Num e
+    , Additive e
     , TensorC a m e
     )
     => Tensor a dims e
@@ -243,12 +306,11 @@ contract (Tensor arr) _ _ = Tensor $ contract_ arr
     (summon (Proxy::Proxy (iOffset+jOffset)))
     (summon (Proxy::Proxy othersOffset))
 
-
 type family ContractedDims (xs::[Nat]) (i::Nat) (j::Nat) :: [Nat] where
     ContractedDims xs i j = Delete (Delete xs j) i
 
 type family Offsets (dims::[Nat]) :: [Nat] where
-    Offsets '[] = '[1]
+    Offsets '[] = '[]
     Offsets (dim ': dims) = Offsets_ dims
 
 type family Offsets_ (dims::[Nat]) :: [Nat] where
@@ -257,13 +319,13 @@ type family Offsets_ (dims::[Nat]) :: [Nat] where
 
 trace
     :: forall a m e (dim::Nat)
-    . (KnownType dim Int, TensorC a m e, Num e)
+    . (KnownType dim Int, TensorC a m e, Additive e)
     => Tensor a '[dim, dim] e
     -> e
-trace (Tensor arr) = f 0 0
+trace (Tensor arr) = f dim1 (A.index arr 0)
   where
     f !i !sum
-      | i < len = f (i + dim1) (sum + A.index arr i)
+      | i < len = f (i + dim1) (sum +. A.index arr i)
       | otherwise = sum
     len = A.length arr
     dim1 = 1 + summon (Proxy::Proxy dim)
@@ -281,6 +343,62 @@ dot (Tensor arr1) (Tensor arr2) =
       | otherwise = sum
     len1 = A.length arr1
     len2 = A.length arr2
+
+instance (Additive e, TensorC a m e) => Additive (Tensor a dims e) where
+    {-# INLINE (+.) #-}
+    (+.) = add
+
+instance
+    ( WithZero e
+    , TensorC a m e
+    , KnownType (Product dims) Int
+    )
+    => WithZero (Tensor a dims e) where
+
+    {-# INLINE zero #-}
+    zero = Tensor $ A.replicate (summon (Proxy::Proxy (Product dims))) zero
+
+instance
+    ( WithNegatives e
+    , WithZero (Tensor a dims e)
+    , TensorC a m e
+    )
+    => WithNegatives (Tensor a dims e) where
+
+    {-# INLINE neg #-}
+    neg = \(Tensor arr) -> Tensor $ A.map neg arr
+
+    {-# INLINE (-.) #-}
+    (-.) = minus
+
+instance (Multiplicative e, TensorC a m e)
+    => WithScalars (Tensor a dims e) where
+
+    type Scalar (Tensor a dims e) = e
+
+    {-# INLINE (*:) #-}
+    (*:) = flip scale
+
+instance (Multiplicative e, TensorC a m e)
+    => Multiplicative (Tensor a '[] e) where
+
+    {-# INLINE (*.) #-}
+    lhs *. rhs = tensor (scalar lhs *. scalar rhs)
+
+instance (WithOne e, TensorC a m e)
+    => WithOne (Tensor a '[] e) where
+
+    {-# INLINE one #-}
+    one = tensor one
+
+instance (WithReciprocals e, TensorC a m e)
+    => WithReciprocals (Tensor a '[] e) where
+
+    {-# INLINE inv #-}
+    inv = tensor . inv . scalar
+
+    {-# INLINE (/.) #-}
+    lhs /. rhs = tensor (scalar lhs /. scalar rhs)
 
 -- changeBasis = undefined
 -- changeBasisAll = undefined

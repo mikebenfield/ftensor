@@ -15,11 +15,12 @@ module Math.FTensor.Lib.Array (
     generate,
     unfoldN,
     convert,
+    map,
 ) where
 
 #include "ftensor.h"
 
-import Prelude hiding (length, read)
+import Prelude hiding (length, read, map)
 import qualified Prelude
 
 import Control.Monad (liftM)
@@ -37,8 +38,9 @@ import Math.FTensor.Internal.Check
 class (IsList a) => Array a m | a -> m, m -> a where
     basicIndex :: a -> Int -> Item a
     length :: a -> Int
-
     new :: Int -> ST s (m s)
+    replicate :: Int -> Item a -> a
+    replicate i x = generate i (const x)
     mLength :: m s -> Int
     basicRead :: m s -> Int -> ST s (Item a)
     basicWrite :: m s -> Int -> Item a -> ST s ()
@@ -85,12 +87,11 @@ arrayFromListN len lst = unfoldN len f lst
 arrayToList :: Array a m => a -> [Item a]
 arrayToList arr = loop 0
   where
-    len = length arr
-    loop n
-      | n >= len = []
-      | otherwise = index arr n : loop (n+1)
+    loop i
+      | i < length arr = index arr i : loop (i+1)
+      | otherwise = []
 
-arrayEq :: (Eq e, Array a m, e ~ Item a) => a -> a -> Bool
+arrayEq :: (Eq (Item a), Array a m) => a -> a -> Bool
 arrayEq lhs rhs = len == length rhs && all f [0..len-1]
   where
     f i = index rhs i == index lhs i
@@ -126,6 +127,12 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
     {-# INLINE new #-}
     new = \i ->
         MutableArrayPrim <$> BA.newByteArray (i * I# (sizeOf# (undefined::e)))
+
+    {-# INLINE replicate #-}
+    replicate = \i x -> runST $ do
+        mba <- BA.newByteArray (i * I# (sizeOf# (undefined::e)))
+        BA.setByteArray mba 0 i x
+        liftM ArrayPrim $ BA.unsafeFreezeByteArray mba
 
     {-# INLINE mLength #-}
     mLength = \(MutableArrayPrim mba) -> BA.sizeofMutableByteArray mba
@@ -187,7 +194,7 @@ instance Traversable ArrayBoxed where
     traverse f array = fromListN (length array) <$> traverse f (toList array)
 
 instance Functor ArrayBoxed where
-    fmap f array = generate (length array) (f . index array)
+    fmap = map
 
 instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     {-# INLINE basicIndex #-}
@@ -200,6 +207,10 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     {-# INLINE new #-}
     new = \i ->
         MutableArrayBoxed <$> A.newArray i undefined
+
+    {-# INLINE replicate #-}
+    replicate = \i x -> runST $
+        A.newArray i x >>= (freeze . MutableArrayBoxed)
 
     {-# INLINE mLength #-}
     mLength = \(MutableArrayBoxed (A.MutableArray ma)) ->
@@ -246,3 +257,6 @@ convert :: (Array a m, Array b n, Item a ~ Item b) => a -> b
 convert arr = generate (length arr) (index arr)
 
 {-# RULES "convert/id" convert = id #-}
+
+map :: (Array a m, Array b n) => (Item a -> Item b) -> a -> b
+map f arr = generate (length arr) (f . index arr)

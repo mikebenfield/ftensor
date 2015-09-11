@@ -1,15 +1,10 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE UndecidableInstances #-} -- for IsList
+{-# LANGUAGE UndecidableInstances #-} -- for CartesianProduct, 
+                                      -- AllMultiIndicesInBounds
 
 module Math.FTensor.Lib.General (
-    Tensor(..),
-    TensorC,
     MultiIndexToI,
     multiIndexToI',
     multiIndexToI,
@@ -24,51 +19,8 @@ import Data.STRef
 import GHC.Exts (IsList(..), Constraint)
 import GHC.TypeLits
 
-import Control.DeepSeq
-
-import Math.FTensor.Internal.TaggedList
-import Math.FTensor.Lib.Array
 import Math.FTensor.SizedList
 import Math.FTensor.Lib.TypeList
-
-newtype Tensor a (dims::[Nat]) e = Tensor (a e)
-  deriving (Eq, Show, Functor, Traversable, Foldable)
-
-type TensorC a m e = (Array (a e) m, Item (a e) ~ e)
-
---deriving instance Show (a e) => Show (Tensor a dims e) -- XXX temporary
-
-instance NFData (a e) => NFData (Tensor a dims e) where
-    rnf (Tensor arr) = rnf arr
-
-instance
-    ( dims ~ (d ': ds)
-    , TensorC a m e
-    , IsList (TaggedList dims e)
-    , Item (TaggedList dims e) ~ IsListItem dims e
-    , KnownNat (Product dims)
-    )
-    => IsList (Tensor a dims e) where
-
-    type Item (Tensor a dims e) = IsListItem dims e
-
-    fromList lst = fromListN (Prelude.length lst) lst
-
-    fromListN len lst =
-        let arrayLen = natIntVal (Proxy::Proxy (Product dims))
-            (lst'::TaggedList dims e) = fromListN len lst
-        in
-        Tensor $ runST $ do
-            newArr <- new arrayLen
-            idx <- newSTRef (0::Int)
-            let at = \x -> do
-                 i <- readSTRef idx
-                 write newArr i x
-                 writeSTRef idx (i+1)
-            mapM_ at lst'
-            freeze newArr
-
-    toList = undefined
 
 type family InBounds (dims::[Nat]) (multiIndex::[Nat]) :: Constraint where
     InBounds '[] '[] = ()
