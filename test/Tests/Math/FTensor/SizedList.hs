@@ -19,21 +19,10 @@ import Test.Tasty.TH (testGroupGenerator)
 
 import Math.FTensor.SizedList
 
-tests = testGroup "Tests.Math.FTensor.SizedList" [smallCheckProperties, autoTests]
+tests = testGroup "Tests.Math.FTensor.SizedList"
+    [smallCheckProperties, autoTests]
 
 autoTests = $(testGroupGenerator)
-
-case_flatten_1 =
-    flatten (Proxy::Proxy 1) [0::Int,1,2,3,4,5] @?= [0::Int,1,2,3,4,5]
-
-case_flatten_2 =
-    flatten (Proxy::Proxy 2) [[0::Int,1,2],[3,4,5]] @?= [0::Int,1,2,3,4,5]
-
-case_flatten_3 =
-    flatten (Proxy::Proxy 1) ((0::Int):-1:-2:-3:-N) @?= [0::Int,1,2,3]
-
-case_flatten_4 =
-    flatten (Proxy::Proxy 2) (((0::Int):-1:-N):-(2:-3:-N):-N) @?= [0::Int,1,2,3]
 
 case_foldr_1 =
     foldr (-) 0 ((1::Int):-2:-3:-N) @?= 2

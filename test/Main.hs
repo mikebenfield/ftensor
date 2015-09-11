@@ -1,4 +1,3 @@
-
 import Test.Tasty
 
 import qualified Tests.Math.FTensor.Lib.Array

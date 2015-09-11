@@ -13,10 +13,8 @@ module Math.FTensor.Lib.General (
     AllMultiIndicesInBounds,
 ) where
 
-import Control.Monad.ST
 import Data.Proxy
-import Data.STRef
-import GHC.Exts (IsList(..), Constraint)
+import GHC.Exts (Constraint)
 import GHC.TypeLits
 
 import Math.FTensor.SizedList
