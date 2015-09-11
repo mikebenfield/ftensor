@@ -8,6 +8,15 @@ module Math.FTensor.Lib.TypeList (
     Fst,
     Snd,
 
+    -- * Misc
+    If,
+    Min,
+    Max,
+    And,
+    Or,
+    Not,
+    Equal,
+
     -- * List operations
     type (!!),
     type (++),
@@ -30,7 +39,6 @@ module Math.FTensor.Lib.TypeList (
     -- * Types to values
     natIntVal,
     KnownType(..),
-    --KnownList(..),
 ) where
 
 import Prelude hiding ((++))
@@ -47,6 +55,32 @@ type family Fst (x :: (k1, k2)) :: k1 where
 
 type family Snd (x :: (k1, k2)) :: k1 where
     Snd ('(,) a b) = b
+
+-- * Misc
+
+type family If (b::Bool) (x::k) (y::k) :: k where
+    If 'True x y = x
+    If 'False x y = y
+
+type family Min (x::Nat) (y::Nat) :: Nat where
+    Min x y = If (x <=? y) x y
+
+type family Max (x::Nat) (y::Nat) :: Nat where
+    Max x y = If (x <=? y) y x
+
+type family And (x::Bool) (y::Bool) :: Bool where
+    And 'True 'True = 'True
+    And x y = 'False
+
+type family Not (x::Bool) :: Bool where
+    Not 'True = 'False
+    Not 'False = 'True
+
+type family Or (x::Bool) (y::Bool) :: Bool where
+    Or 'False 'False = 'False
+    Or x y = 'True
+
+type Equal (m::Nat) (n::Nat) = And (m <=? n) (n <=? m)
 
 -- * List operations
 
