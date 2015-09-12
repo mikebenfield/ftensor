@@ -37,7 +37,6 @@ module Math.FTensor.Lib.TypeList (
     Product,
 
     -- * Types to values
-    natIntVal,
     KnownType(..),
 ) where
 
@@ -153,10 +152,6 @@ type family Product (ns::[Nat]) :: Nat where
     Product (n ': ns) = n * Product ns
 
 -- * Types to values
-
-{-# INLINE natIntVal #-}
-natIntVal :: forall (n::Nat). KnownNat n => Proxy n -> Int
-natIntVal = fromInteger . natVal
 
 class KnownType (typ::k) result where
     summon :: (Proxy typ) -> result

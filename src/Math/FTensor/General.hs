@@ -46,21 +46,21 @@ module Math.FTensor.General (
 
 import Control.Monad.ST (runST)
 import Data.Proxy
-import GHC.Exts (IsList(..))
 import Data.STRef
+import GHC.Exts (IsList(..))
 import GHC.TypeLits
 
 import Control.DeepSeq
 
 import Math.FTensor.Internal.TaggedList
-import Math.FTensor.Lib.Array hiding (generate, convert, index)
-import Math.FTensor.Lib.General
-import Math.FTensor.Lib.TypeList
-import Math.FTensor.SizedList
-import qualified Math.FTensor.Lib.Array as A
 import qualified Math.FTensor.Internal.Check
 
+import Math.FTensor.Lib.General
+import Math.FTensor.Lib.TypeList
+import qualified Math.FTensor.Lib.Array as A
+
 import Math.FTensor.Algebra
+import Math.FTensor.SizedList
 
 #include "ftensor.h"
 
@@ -69,7 +69,7 @@ import Math.FTensor.Algebra
 newtype Tensor a (dims::[Nat]) e = Tensor (a e)
   deriving (Eq, Show, Functor, Traversable, Foldable)
 
-type TensorC a m e = (Array (a e) m, Item (a e) ~ e)
+type TensorC a m e = (A.Array (a e) m, Item (a e) ~ e)
 
 instance NFData (a e) => NFData (Tensor a dims e) where
     rnf (Tensor arr) = rnf arr
@@ -88,24 +88,24 @@ instance
     fromList lst = fromListN (Prelude.length lst) lst
 
     fromListN len lst =
-        let arrayLen = natIntVal (Proxy::Proxy (Product dims))
+        let arrayLen = summon (Proxy::Proxy (Product dims))
             (lst'::TaggedList dims e) = fromListN len lst
         in
         Tensor $ runST $ do
-            newArr <- new arrayLen
+            newArr <- A.new arrayLen
             idx <- newSTRef (0::Int)
             let at = \x -> do
                  i <- readSTRef idx
-                 write newArr i x
+                 A.write newArr i x
                  writeSTRef idx (i+1)
             mapM_ at lst'
-            freeze newArr
+            A.freeze newArr
 
     toList = undefined
 
-type TensorBoxed (dims::[Nat]) e = Tensor ArrayBoxed dims e
+type TensorBoxed (dims::[Nat]) e = Tensor A.ArrayBoxed dims e
 
-type TensorPrim (dims::[Nat]) e = Tensor ArrayPrim dims e
+type TensorPrim (dims::[Nat]) e = Tensor A.ArrayPrim dims e
 
 type MultiIndex (dims::[Nat]) = SizedList (Length dims) Int
 
@@ -255,6 +255,7 @@ type TensorProductConstraint a m e (ds1::[Nat]) (ds2::[Nat]) =
     , KnownNat (Product ds2)
     )
 
+
 tensorProduct
     :: forall a m e (ds1::[Nat]) (ds2::[Nat])
     . TensorProductConstraint a m e ds1 ds2
@@ -262,6 +263,7 @@ tensorProduct
     -> Tensor a ds2 e
     -> Tensor a (ds1 ++ ds2) e
 tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
+    -- this is faster than using unfoldN or generate
     newArr <- A.new (len1 * len2)
     let oneRow = \i ->
          let x = A.index arr1 i
@@ -271,7 +273,7 @@ tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
             (\j -> A.write newArr (j+i') (x *. A.index arr2 j))
             [0 .. len2-1]
     mapM_ oneRow [0..len1-1]
-    freeze newArr
+    A.freeze newArr
   where
     len1 :: Int
     len1 = summon (Proxy::Proxy (Product ds1))
@@ -371,7 +373,7 @@ instance (Additive e, TensorC a m e) => Additive (Tensor a dims e) where
 instance
     ( WithZero e
     , TensorC a m e
-    , KnownType (Product dims) Int
+    , KnownNat (Product dims)
     )
     => WithZero (Tensor a dims e) where
 

@@ -1,7 +1,9 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE UndecidableInstances #-} -- for NatToNat_
 
 module Math.FTensor.Internal.TaggedList (
     TaggedList,
@@ -9,12 +11,12 @@ module Math.FTensor.Internal.TaggedList (
 ) where
 
 import Data.Proxy
-import Data.Traversable (fmapDefault)
 import GHC.Exts (IsList(..))
 import GHC.TypeLits
 
-import Math.FTensor.Lib.TypeList
 import qualified Math.FTensor.Internal.Check
+
+import Math.FTensor.Lib.TypeList
 
 #include "ftensor.h"
 
@@ -27,17 +29,9 @@ data TaggedList (lengths::[Nat]) item where
         -> TaggedList (len1 ': len2 ': lens) item
 
 deriving instance Eq item => Eq (TaggedList lens item)
-
-instance Foldable (TaggedList lens) where
-    foldr f x (One lst) = foldr f x lst
-    foldr f x (More lst) = foldr (flip $ foldr f) x lst
-
-instance Functor (TaggedList lens) where
-    fmap = fmapDefault
-
-instance Traversable (TaggedList lens) where
-    traverse f (One lst) = pure One <*> traverse f lst
-    traverse f (More lst) = pure More <*> traverse (traverse f) lst
+deriving instance Functor (TaggedList lengths)
+deriving instance Foldable (TaggedList lengths)
+deriving instance Traversable (TaggedList lengths)
 
 instance KnownNat len => IsList (TaggedList '[len] item) where
     type Item (TaggedList '[len] item) = item
@@ -51,7 +45,7 @@ instance KnownNat len => IsList (TaggedList '[len] item) where
             (length', length)
             $ One list
       where
-        length = natIntVal (Proxy::Proxy len)
+        length = summon (Proxy::Proxy len)
 
     toList (One lst) = lst
 
@@ -71,7 +65,7 @@ instance (KnownNat length1, KnownNat length2,
             (length', length)
             $ More list
       where
-        length = natIntVal (Proxy::Proxy length1)
+        length = summon (Proxy::Proxy length1)
 
     toList (More lst) = lst
 

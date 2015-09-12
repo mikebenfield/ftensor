@@ -41,6 +41,10 @@ main = defaultMain
         [ bench "trace uMat" $ nf trace uMat
         , bench "trace vMat" $ nf trace vMat
         ]
+    , bgroup "tensorProduct"
+        [ bench "tensorProduct uBig" $ nf (tensorProduct uBig) uBig
+        , bench "tensorProduct v333" $ nf (tensorProduct v333) v333
+        ]
     , bgroup "contract"
         [ bench "contract uMat" $ nf cont uMat
         ]
@@ -59,4 +63,3 @@ main = defaultMain
             (Proxy::Proxy '[0,1,0,1,0,1,0,1,0,1])
         ]
     ]
-

@@ -53,7 +53,7 @@ multiIndexToI'
     => Proxy dims
     -> Proxy multiIndex
     -> Int
-multiIndexToI' _ _ = natIntVal (Proxy::Proxy result)
+multiIndexToI' _ _ = summon (Proxy::Proxy result)
 
 multiIndexToI
     :: forall (dims::[Nat])
