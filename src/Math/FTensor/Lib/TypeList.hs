@@ -184,3 +184,9 @@ instance
     )
     => KnownType (d ': ds) (SizedList len a) where
     summon _ = summon (Proxy::Proxy d) :- summon (Proxy::Proxy ds)
+
+instance KnownType 'True Bool where
+    summon _ = True
+
+instance KnownType 'False Bool where
+    summon _ = False

@@ -157,7 +157,7 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
 
     {-# INLINE freeze #-}
     freeze = \(MutableArrayPrim mba) ->
-        liftM ArrayPrim $ BA.unsafeFreezeByteArray mba
+        ArrayPrim <$> BA.unsafeFreezeByteArray mba
 
 newtype MutableArrayBoxed a s = MutableArrayBoxed (A.MutableArray s a)
 
@@ -205,8 +205,8 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     length = \(ArrayBoxed (A.Array x)) -> I# (sizeofArray# x)
 
     {-# INLINE new #-}
-    new = \i ->
-        MutableArrayBoxed <$> A.newArray i undefined
+    new = \i -> MutableArrayBoxed <$> A.newArray i
+        (error "uninitialized array element")
 
     {-# INLINE replicate #-}
     replicate = \i x -> runST $
@@ -230,13 +230,12 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
         A.copyMutableArray ma i ma'
 
     {-# INLINE freeze #-}
-    freeze = \(MutableArrayBoxed ma) ->
-        liftM ArrayBoxed $ A.unsafeFreezeArray ma
+    freeze = \(MutableArrayBoxed ma) -> ArrayBoxed <$> A.unsafeFreezeArray ma
 
 generate :: Array a m => Int -> (Int -> Item a) -> a
 generate len f = runST $ do
     newArr <- new len
-    let at = \i -> write newArr i (f i)
+    let at i = write newArr i (f i)
     mapM_ at [0..len-1]
     freeze newArr
 
@@ -244,11 +243,11 @@ unfoldN :: Array a m => Int -> (b -> (Item a, b)) -> b -> a
 unfoldN len f init = runST $ do
     newArr <- new len
     ref <- newSTRef init
-    let at = \i -> do
-         oldB <- readSTRef ref
-         let (elem, newB) = f oldB
-         writeSTRef ref newB
-         write newArr i elem
+    let at i = do
+            oldB <- readSTRef ref
+            let (elem, newB) = f oldB
+            writeSTRef ref newB
+            write newArr i elem
     mapM_  at [0..len-1]
     freeze newArr
 

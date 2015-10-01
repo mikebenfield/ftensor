@@ -84,6 +84,25 @@ case_t1 = case t1 of
     Tensor arr -> arr @?= fromList
         [1::Int,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
 
+case_mul_1 =
+    let t :: TensorBoxed '[4] Int
+        t = [1,1,1,1]
+    in
+    mul t1 (Proxy::Proxy 2) t (Proxy::Proxy 0) @?= [[10, 26, 42], [58, 74, 90]]
+
+case_mul_2 =
+    let t :: TensorBoxed '[4] Int
+        t = [1,1,1,1]
+    in
+    mul t (Proxy::Proxy 0) t1 (Proxy::Proxy 2) @?= [[10, 26, 42], [58, 74, 90]]
+
+case_mul_3 =
+    let t :: TensorBoxed '[3] Int
+        t = [1,1,1]
+    in
+    mul t1 (Proxy::Proxy 1) t (Proxy::Proxy 0) @?=
+        [[15, 18, 21, 24], [51, 54, 57, 60]]
+
 case_index_13 = index t1 (0:-0:-0:-N) @?= 1
 case_pIndex_13 = pIndex t1 (Proxy::Proxy '[0,0,0]) @?= 1
 case_index_14 = index t1 (0:-0:-1:-N) @?= 2
@@ -150,6 +169,26 @@ t2 = [ [ [0, 1], [2, 3], [4, 5] ]
 case_contract_2 =
     contract t2 (Proxy::Proxy 0) (Proxy::Proxy 2) @?= [7, 11, 15]
 
+t3 :: TensorBoxed '[2, 2, 2, 2] Int
+t3 = [ [ [ [0,1]
+         , [2,3]
+         ]
+       , [ [4,5]
+         , [6,7]
+         ]
+       ]  
+     , [ [ [8,9]
+         , [10,11]
+         ]
+       , [ [12,13]
+         , [14,15]
+         ]
+       ]
+     ]
+
+case_contract_3 =
+    contract t3 (Proxy::Proxy 1) (Proxy::Proxy 3) @?= [[5,9],[21,25]]
+
 newtype T0 = T0 (TensorBoxed '[] Int)
     deriving (Show, Eq)
 
@@ -174,7 +213,6 @@ instance (Monad m) => Serial m T22 where
         f :: Int -> Int -> Int -> Int -> T22
         f i j k l = T22 $ fromList [[i, j], [k,l]]
 
-
 smallCheckProperties = testGroup "SmallCheck"
     [ SC.testProperty "scalar . tensor" $
         \(i::Int) ->
@@ -197,7 +235,27 @@ smallCheckProperties = testGroup "SmallCheck"
                   , index t1 (1:-N) * index t2 (1:-N)
                   ]
                 ]
-    , SC.testProperty "contract / trace" $
-        \(T22 t) ->
-            trace t == scalar (contract t (Proxy::Proxy 0) (Proxy::Proxy 1))
+    -- , SC.testProperty "contract / trace" $
+    --     \(T22 t) ->
+    --         trace t == scalar (contract t (Proxy::Proxy 0) (Proxy::Proxy 1))
+    , SC.testProperty "mul / dot" $
+        \(T2 t1, T2 t2) ->
+            dot t1 t2 == scalar (mul t1 (Proxy::Proxy 0) t2 (Proxy::Proxy 0))
+    -- , SC.testProperty "changeBasisAll id" $
+    --     \(T22 t) ->
+    --         t == changeBasisAll t [[1,0],[0,1]]
+    -- , SC.testProperty "changeBasisAll . changeBasisAll" $
+    --     \(T22 t) ->
+    --         t == changeBasisAll (changeBasisAll t [[2,5],[1,3]])
+    --             [[3,-5],[-1,2]]
+    , SC.testProperty "changeBasis id" $
+        \(T2 t) ->
+            t == changeBasis t [[1, 0], [0, 1]] (Proxy::Proxy '[0])
+    , SC.testProperty "changeBasis 1" $
+        \(T2 t) ->
+            let m :: TensorBoxed '[2,2] Int
+                m = [[3,5],[7,11]]
+            in
+            mul t (Proxy::Proxy 0) m (Proxy::Proxy 1)
+            == changeBasis t m (Proxy::Proxy '[0])
     ]

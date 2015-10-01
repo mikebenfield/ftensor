@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE UndecidableInstances #-} -- for ContractedDims, IsList
 
 module Math.FTensor.General (
@@ -32,22 +33,25 @@ module Math.FTensor.General (
     minus,
     tensorProduct,
     contract,
+    mul,
     trace,
     dot,
-    -- changeBasis,
-    -- changeBasisAll,
+    changeBasis,
+    changeBasisAll,
 
     -- * Type families
     GenerateConstraint,
     TensorProductConstraint,
     ContractConstraint,
+    MulConstraint,
+    ChangeBasisConstraint,
     ContractedDims,
 ) where
 
-import Control.Monad.ST (runST)
+import Control.Monad.ST (runST, ST)
 import Data.Proxy
 import Data.STRef
-import GHC.Exts (IsList(..))
+import GHC.Exts (Constraint, IsList(..))
 import GHC.TypeLits
 
 import Control.DeepSeq
@@ -94,10 +98,10 @@ instance
         Tensor $ runST $ do
             newArr <- A.new arrayLen
             idx <- newSTRef (0::Int)
-            let at = \x -> do
-                 i <- readSTRef idx
-                 A.write newArr i x
-                 writeSTRef idx (i+1)
+            let at x = do
+                    i <- readSTRef idx
+                    A.write newArr i x
+                    writeSTRef idx (i+1)
             mapM_ at lst'
             A.freeze newArr
 
@@ -280,35 +284,37 @@ tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
     len2 :: Int
     len2 = summon (Proxy::Proxy (Product ds2))
 
-contract_
-    :: (Additive (Item a), A.Array a m)
-    => a -> Int -> Int -> Int -> Int -> a
-contract_ arr length iDim ijOffset othersOffset =
-    A.generate length (sumStartingAt . (*othersOffset))
-  where
-    sumStartingAt i = f (i+ijOffset*iDim) (i+ijOffset) (A.index arr i)
-    f !max !idx !sum
-      | idx < max = f max (idx+ijOffset) (sum +. A.index arr idx)
-      | otherwise = sum
+data ContractArguments e s = ContractArguments
+    { read :: Int -> ST s e
+    , write :: Int -> e -> ST s ()
+    , ijOffset :: Int
+    , ijCount :: Int
+    , firstOffset :: Int
+    , firstCount :: Int
+    , middleOffset :: Int
+    , middleCount :: Int
+    , lastCount :: Int
+    }
 
-type ContractConstraint a m e (dims::[Nat]) (i::Nat) (j::Nat) =
-    ( Not (Equal i j) ~ 'True
-    , i+1 <= Length dims
-    , j+1 <= Length dims
-    , (dims !! i) ~ (dims !! j)
-    , KnownNat (dims !! i)
-    , KnownNat (IJOffset dims i j)
-    , KnownNat (Product (ContractedDims dims i j))
-    , KnownNat (OthersOffset dims i j)
-    , Additive e
-    , TensorC a m e
-    )
+contract_ :: Additive e => ContractArguments e s -> ST s ()
+contract_ ContractArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
+    let writeOne i = do
+            writeIndex' <- readSTRef writeIndex
+            sumStartingAt i >>= write writeIndex'
+            writeSTRef writeIndex (writeIndex' + 1)
+        innerLoop !i =
+            mapM_ writeOne [i, i+1 .. i+lastCount-1]
+        middleLoop !i =
+            mapM_ innerLoop [i, i+middleOffset .. i+middleCount*middleOffset-1]
 
-type IJOffset (dims::[Nat]) (i::Nat) (j::Nat) =
-    Product (Drop (i+1) dims) + Product (Drop (j+1) dims)
-
-type OthersOffset (dims::[Nat]) (i::Nat) (j::Nat) =
-    Sum (Offsets dims) - (IJOffset dims i j)
+        sumStartingAt i = read i >>= f (i+ijOffset*ijCount) (i+ijOffset) 
+        f !max !idx !sum
+          | idx < max = do
+                val <- read idx
+                f max (idx+ijOffset) (sum +. val)
+          | otherwise = return sum
+    in
+    mapM_ middleLoop [0, firstOffset .. firstCount*firstOffset-1]
 
 contract
     :: forall a m e (dims::[Nat]) (i::Nat) (j::Nat)
@@ -317,11 +323,56 @@ contract
     -> Proxy i
     -> Proxy j
     -> Tensor a (ContractedDims dims i j) e
-contract (Tensor arr) _ _ = Tensor $ contract_ arr
-    (summon (Proxy::Proxy (Product (ContractedDims dims i j))))
-    (summon (Proxy::Proxy (dims !! i)))
-    (summon (Proxy::Proxy (IJOffset dims i j)))
-    (summon (Proxy::Proxy (OthersOffset dims i j)))
+contract (Tensor arr) _ _ = Tensor $ runST $ do
+    newArr <-
+        A.new (summon (Proxy::Proxy (Product (ContractedDims dims i j))))
+    contract_ ContractArguments
+        { read = return . A.index arr
+        , write = A.write newArr
+        , ijOffset = summon (Proxy::Proxy (IJOffset dims i j))
+        , ijCount = summon (Proxy:: Proxy (dims !! i))
+        , firstOffset = summon (Proxy::Proxy (FirstOffset dims i j))
+        , firstCount = summon (Proxy::Proxy (FirstCount dims i j))
+        , middleOffset = summon (Proxy::Proxy (MiddleOffset dims i j))
+        , middleCount = summon (Proxy::Proxy (MiddleCount dims i j))
+        , lastCount = summon (Proxy::Proxy (LastCount dims i j))
+        }
+    A.freeze newArr
+
+type ContractConstraint a m e (dims::[Nat]) (i::Nat) (j::Nat) =
+    ( Equal i j ~ 'False
+    , i+1 <= Length dims
+    , j+1 <= Length dims
+    , (dims !! i) ~ (dims !! j)
+    , KnownNat (dims !! i)
+    , KnownNat (IJOffset dims i j)
+    , KnownNat (Product (ContractedDims dims i j))
+    , KnownNat (FirstOffset dims i j)
+    , KnownNat (FirstCount dims i j)
+    , KnownNat (MiddleOffset dims i j)
+    , KnownNat (MiddleCount dims i j)
+    , KnownNat (LastCount dims i j)
+    , Additive e
+    , TensorC a m e
+    )
+
+type FirstOffset (dims::[Nat]) (i::Nat) (j::Nat) =
+    Product (Drop (Min i j) dims)
+
+type FirstCount (dims::[Nat]) (i::Nat) (j::Nat) =
+    Product (Take (Min i j) dims)
+
+type MiddleOffset (dims::[Nat]) (i::Nat) (j::Nat) =
+    Product (Drop (Max i j) dims)
+
+type MiddleCount (dims::[Nat]) (i::Nat) (j::Nat) =
+    Product (Drop (Min i j+1) (Take (Max i j) dims))
+
+type LastCount (dims::[Nat]) (i::Nat) (j::Nat) =
+    Product (Drop (Max i j+1) dims)
+
+type IJOffset (dims::[Nat]) (i::Nat) (j::Nat) =
+    Product (Drop (i+1) dims) + Product (Drop (j+1) dims)
 
 type family ContractedDims (xs::[Nat]) (i::Nat) (j::Nat) :: [Nat] where
     ContractedDims xs i j = Delete (Delete xs (Max i j)) (Min i j)
@@ -365,6 +416,240 @@ dot (Tensor arr1) (Tensor arr2) =
     g i = A.index arr1 i *. A.index arr2 i
     len1 = A.length arr1
     len2 = A.length arr2
+
+type MulConstraint a m e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat) =
+    ( Additive e
+    , Multiplicative e
+    , TensorC a m e
+    , (dims1 !! i) ~ (dims2 !! j)
+    , KnownNat (Product (MulNewDims dims1 i dims2 j))
+    , KnownNat (IOffset dims1 i)
+    , KnownNat (IOffset dims2 j)
+    , KnownNat (dims1 !! i)
+    , KnownNat (MulFirstOffset dims1 i)
+    , KnownNat (MulFirstCount dims1 i)
+    , KnownNat (MulFirstOffset dims2 j)
+    , KnownNat (MulFirstCount dims2 j)
+    )
+
+data MulArguments e s = MulArguments
+    { read1 :: Int -> ST s e
+    , read2 :: Int -> ST s e
+    , mWrite :: Int -> e -> ST s ()
+    , iOffset1 :: Int
+    , iOffset2 :: Int
+    , iCount :: Int
+    , firstOffset1 :: Int
+    , firstCount1 :: Int
+    , lastCount1 :: Int
+    , firstOffset2 :: Int
+    , firstCount2 :: Int
+    , lastCount2 :: Int
+    }
+
+mul_ :: (Additive e, Multiplicative e) => MulArguments e s -> ST s ()
+mul_ MulArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
+    let writeOne !i !j = do
+            writeIndex' <- readSTRef writeIndex
+            sumStartingAt i j >>= mWrite writeIndex'
+            writeSTRef writeIndex (writeIndex' + 1)
+        innerLoop !i !j =
+            mapM_ (writeOne i) [j, j+1 .. j + lastCount2 - 1]
+        innerMiddleLoop !i =
+            mapM_ (innerLoop i)
+                [0, firstOffset2 .. firstOffset2*firstCount2 - 1]
+        outerMiddleLoop !i =
+            mapM_ innerMiddleLoop [i, i+1 .. i + lastCount1 - 1]
+        sumStartingAt !i !j = do
+            i' <- read1 i
+            j' <- read2 j
+            f (i + iOffset1*iCount) (i + iOffset1) (j + iOffset2) (i'*.j')
+        f !iMax !i !j !sum
+          | i < iMax = do
+                i' <- read1 i
+                j' <- read2 j
+                f iMax (i + iOffset1) (j + iOffset2) (sum +. i' *. j')
+          | otherwise = return sum
+    in
+    mapM_ outerMiddleLoop [0, firstOffset1 .. firstOffset1*firstCount1 - 1]
+
+mul
+    :: forall a m e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat)
+    . MulConstraint a m e dims1 dims2 i j
+    => Tensor a dims1 e
+    -> Proxy i
+    -> Tensor a dims2 e
+    -> Proxy j
+    -> Tensor a (Delete dims1 i ++ Delete dims2 j) e
+mul (Tensor arr1) _ (Tensor arr2) _ = Tensor $ runST $ do
+    newArr <-
+        A.new (summon (Proxy::Proxy (Product (MulNewDims dims1 i dims2 j))))
+    mul_ MulArguments
+        { read1 = return . A.index arr1
+        , read2 = return . A.index arr2
+        , mWrite = A.write newArr
+        , iOffset1 = summon (Proxy::Proxy (IOffset dims1 i))
+        , iOffset2 = summon (Proxy::Proxy (IOffset dims2 j))
+        , iCount = summon (Proxy::Proxy (dims1 !! i))
+        , firstOffset1 = summon (Proxy::Proxy (MulFirstOffset dims1 i))
+        , firstCount1 = summon (Proxy::Proxy (MulFirstCount dims1 i))
+        , lastCount1 = summon (Proxy::Proxy (IOffset dims1 i))
+        , firstOffset2 = summon (Proxy::Proxy (MulFirstOffset dims2 j))
+        , firstCount2 = summon (Proxy::Proxy (MulFirstCount dims2 j))
+        , lastCount2 = summon (Proxy::Proxy (IOffset dims2 j))
+        }
+    A.freeze newArr
+
+type MulNewDims (dims1::[Nat]) (i::Nat) (dims2::[Nat]) (j::Nat) =
+    Delete dims1 i ++ Delete dims2 j
+
+type IOffset (dims::[Nat]) (n::Nat) = Product (Drop (n+1) dims)
+
+type MulFirstOffset (dims::[Nat]) (n::Nat) = Product (Drop n dims)
+
+type MulFirstCount (dims::[Nat]) (n::Nat) = Product (Take n dims)
+
+type family AllEq (n::Nat) (ns::[Nat]) :: Bool where
+    AllEq n '[] = 'True
+    AllEq n (m ': ms) = And (Equal n m) (AllEq n ms)
+
+type ChangeBasisConstraint a m e dims dim slots =
+    ( Additive e
+    , Multiplicative e
+    , TensorC a m e
+    , ChangeBasisClass dims dim slots
+    )
+
+changeBasis
+    :: ChangeBasisConstraint a m e dims dim slots
+    => Tensor a dims e
+    -> Tensor a [dim, dim] e
+    -> Proxy slots
+    -> Tensor a dims e
+changeBasis = changeBasis_
+
+data ChangeBasisArguments e s = ChangeBasisArguments
+    { readT :: Int -> ST s e
+    , readM :: Int -> ST s e
+    , writeT :: Int -> e -> ST s ()
+    , aOffset :: Int
+    , aCount :: Int
+    , bOffset :: Int
+    , bCount :: Int
+    , cCount :: Int
+    }
+
+changeBasis1_
+    :: (Additive e, Multiplicative e)
+    => ChangeBasisArguments e s 
+    -> ST s ()
+changeBasis1_ ChangeBasisArguments{..} = do
+    writeIdx <- newSTRef 0
+    mapM_ (writeOne writeIdx) $ do
+        outerOffset <- [0, aOffset .. aOffset*aCount - 1]
+        idxM <- [0, bCount .. bCount*bCount - 1]
+        idx <- [outerOffset, outerOffset + 1 ..
+            outerOffset + cCount - 1]
+        return (idx, idxM)
+  where
+    writeOne !writeIdx (!idx, !idxM) = do
+        i <- readSTRef writeIdx
+        sumAt idx idxM >>= writeT i
+        writeSTRef writeIdx (i+1)
+    sumAt idx idxM = do
+        val1 <- readT idx
+        val2 <- readM idxM
+        f (idx+bOffset) (idxM+1) (idxM+bCount) (val1 *. val2)
+    f !idx !idxM !idxMMax !sum
+      | idxM < idxMMax = do
+        i' <- readT idx
+        j' <- readM idxM
+        f (idx + bOffset) (idxM + 1) idxMMax (sum +. i' *. j')
+      | otherwise = return sum
+
+
+class ChangeBasisClass (dims::[Nat]) (dim::Nat) (slots::[Nat]) where
+    changeBasis_
+        :: forall a m e
+        . (Additive e, Multiplicative e, TensorC a m e)
+        => Tensor a dims e
+        -> Tensor a [dim, dim] e
+        -> Proxy slots
+        -> Tensor a dims e
+
+instance ChangeBasisClass dims dim '[] where
+    {-# INLINE changeBasis_ #-}
+    changeBasis_ t _ _ = t
+
+instance
+    ( ChangeBasisClass dims dim slots
+    , (dims !! slot) ~ dim
+    , NotIn slots slot
+    , KnownNat (AOffset dims slot)
+    , KnownNat (ACount dims slot)
+    , KnownNat dim
+    , KnownNat (CCount dims slot)
+    )
+    => ChangeBasisClass dims dim (slot ': slots) where
+    changeBasis_ (Tensor arrT) m@(Tensor arrM) _ =
+        changeBasis_ t m (Proxy::Proxy slots)
+      where
+        t = Tensor $ runST $ do
+            newArr <- A.new (A.length arrT)
+            changeBasis1_ ChangeBasisArguments
+                { readT = return . A.index arrT
+                , readM = return . A.index arrM
+                , writeT = A.write newArr
+                , aOffset = summon (Proxy::Proxy (AOffset dims slot))
+                , aCount = summon (Proxy::Proxy (ACount dims slot))
+                , bOffset = summon (Proxy::Proxy (BOffset dims slot))
+                , bCount = summon (Proxy::Proxy dim)
+                , cCount = summon (Proxy::Proxy (CCount dims slot))
+                }
+            A.freeze newArr
+
+type AOffset (dims::[Nat]) slot = Product (Drop slot dims)
+
+type ACount (dims::[Nat]) slot = Product (Take slot dims)
+
+type BOffset (dims::[Nat]) slot = Product (Drop (slot+1) dims)
+
+type CCount (dims::[Nat]) slot = BOffset dims slot
+
+type family NotIn (list::[Nat]) (item::Nat) :: Constraint where
+    NotIn '[] item = ()
+    NotIn (x ': xs) x = 'True ~ 'False
+    NotIn (x ': xs) y = NotIn xs y
+
+-- changeBasis
+--     :: forall a m e (dim::Nat) (slots::[Nat])
+--     . (Additive e, Multiplicative e, KnownNat dim)
+--     => Tensor a dims e
+--     -> Tensor a [dim, dim] e
+--     -> Proxy slots
+--     -> Tensor a dims e
+-- changeBasis t m _ =
+
+
+changeBasisAll
+    :: forall a m e (dim::Nat) (dims::[Nat])
+    . (Additive e, Multiplicative e, AllEq dim dims ~ 'True,
+      dim ~ (dims !! 0),
+      KnownNat dim, GenerateConstraint a m e dims,
+      KnownType dims (MultiIndex dims))
+    => Tensor a dims e
+    -> Tensor a [dim, dim] e
+    -> Tensor a dims e
+changeBasisAll t m = generate f
+  where
+    f multiIndex =
+        foldr1 (+.) $ map (\mi -> indexMat mi multiIndex *. index t mi) lists
+    indexMat :: SizedList s Int -> SizedList s Int -> e
+    indexMat (i:-N) (k:-N) = index m (k:-i:-N)
+    indexMat (i:-is) (k:-ks) = index m (k:-i:-N) *. indexMat is ks
+    indexMat _ _ = error "changeBasisAll: can't happen"
+    lists :: [MultiIndex dims]
+    lists = summon (Proxy::Proxy (AllMultiIndicesInBounds dims))
 
 instance (Additive e, TensorC a m e) => Additive (Tensor a dims e) where
     {-# INLINE (+.) #-}
@@ -421,6 +706,3 @@ instance (WithReciprocals e, TensorC a m e)
 
     {-# INLINE (/.) #-}
     lhs /. rhs = tensor (scalar lhs /. scalar rhs)
-
--- changeBasis = undefined
--- changeBasisAll = undefined
