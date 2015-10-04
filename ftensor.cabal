@@ -34,10 +34,11 @@ library
     Math.FTensor.Internal.Check
     Math.FTensor.Internal.TaggedList
     Math.FTensor.SizedList
-  build-depends:       base >=4.8 && <4.9,
-                       primitive,
-                       deepseq,
-                       ghc-typelits-natnormalise
+  build-depends:
+    base >=4.8 && <4.9,
+    primitive,
+    deepseq,
+    ghc-typelits-natnormalise
   hs-source-dirs:      src
   default-language:    Haskell2010
   default-extensions:  
@@ -54,8 +55,9 @@ library
     TypeFamilies
     TypeOperators
     ViewPatterns
-  ghc-options:         -O2 -Wall -fno-warn-name-shadowing
-                       -fno-warn-missing-signatures
+  ghc-options:
+    -O2 -Wall -fno-warn-name-shadowing
+    -fno-warn-missing-signatures
   include-dirs:
     include
   install-includes:
@@ -70,22 +72,24 @@ library
     cpp-options: -DFTENSOR_INTERNAL_CHECKS
 
 executable ftensor-test
-  build-depends:       base >=4.8 && <4.9,
-                       tasty >=0.10,
-                       tasty-hunit >=0.9,
-                       tasty-quickcheck >=0.8,
-                       tasty-smallcheck >=0.8,
-                       tasty-th,
-                       smallcheck,
-                       ftensor
+  build-depends:
+    base >=4.8 && <4.9,
+    tasty >=0.10,
+    tasty-hunit >=0.9,
+    tasty-quickcheck >=0.8,
+    tasty-smallcheck >=0.8,
+    tasty-th,
+    smallcheck,
+    ftensor
   main-is:             Main.hs
   hs-source-dirs:      test
   default-language:    Haskell2010
 
 executable ftensor-bench
-  build-depends:       base >=4.8 && <4.9,
-                       ftensor,
-                       criterion
+  build-depends:
+    base >=4.8 && <4.9,
+    ftensor,
+    criterion
   main-is:             Main.hs
   hs-source-dirs:      bench
   default-language:    Haskell2010

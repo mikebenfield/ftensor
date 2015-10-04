@@ -196,7 +196,7 @@ cobM :: TensorBoxed '[2,2] Int
 cobM = [[1,2],[3,4]]
 
 case_changeBasis_1 =
-    changeBasis cobTestM cobM (Proxy::Proxy '[0,1]) @?= [[63,145],[143,329]
+    changeBasis cobTestM cobM (Proxy::Proxy '[0,1]) @?= [[63,145],[143,329]]
 
 newtype T0 = T0 (TensorBoxed '[] Int)
     deriving (Show, Eq)
