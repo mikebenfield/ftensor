@@ -621,16 +621,6 @@ type family NotIn (list::[Nat]) (item::Nat) :: Constraint where
     NotIn (x ': xs) x = 'True ~ 'False
     NotIn (x ': xs) y = NotIn xs y
 
--- changeBasis
---     :: forall a m e (dim::Nat) (slots::[Nat])
---     . (Additive e, Multiplicative e, KnownNat dim)
---     => Tensor a dims e
---     -> Tensor a [dim, dim] e
---     -> Proxy slots
---     -> Tensor a dims e
--- changeBasis t m _ =
-
-
 changeBasisAll
     :: forall a m e (dim::Nat) (dims::[Nat])
     . (Additive e, Multiplicative e, AllEq dim dims ~ 'True,

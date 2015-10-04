@@ -189,6 +189,15 @@ t3 = [ [ [ [0,1]
 case_contract_3 =
     contract t3 (Proxy::Proxy 1) (Proxy::Proxy 3) @?= [[5,9],[21,25]]
 
+cobTestM :: TensorBoxed '[2,2] Int
+cobTestM = [[5,6],[7,8]]
+
+cobM :: TensorBoxed '[2,2] Int
+cobM = [[1,2],[3,4]]
+
+case_changeBasis_1 =
+    changeBasis cobTestM cobM (Proxy::Proxy '[0,1]) @?= [[63,145],[143,329]
+
 newtype T0 = T0 (TensorBoxed '[] Int)
     deriving (Show, Eq)
 
@@ -235,19 +244,19 @@ smallCheckProperties = testGroup "SmallCheck"
                   , index t1 (1:-N) * index t2 (1:-N)
                   ]
                 ]
-    -- , SC.testProperty "contract / trace" $
-    --     \(T22 t) ->
-    --         trace t == scalar (contract t (Proxy::Proxy 0) (Proxy::Proxy 1))
+    , SC.testProperty "contract / trace" $
+        \(T22 t) ->
+            trace t == scalar (contract t (Proxy::Proxy 0) (Proxy::Proxy 1))
     , SC.testProperty "mul / dot" $
         \(T2 t1, T2 t2) ->
             dot t1 t2 == scalar (mul t1 (Proxy::Proxy 0) t2 (Proxy::Proxy 0))
-    -- , SC.testProperty "changeBasisAll id" $
-    --     \(T22 t) ->
-    --         t == changeBasisAll t [[1,0],[0,1]]
-    -- , SC.testProperty "changeBasisAll . changeBasisAll" $
-    --     \(T22 t) ->
-    --         t == changeBasisAll (changeBasisAll t [[2,5],[1,3]])
-    --             [[3,-5],[-1,2]]
+    , SC.testProperty "changeBasisAll id" $
+        \(T22 t) ->
+            t == changeBasisAll t [[1,0],[0,1]]
+    , SC.testProperty "changeBasisAll . changeBasisAll" $
+        \(T22 t) ->
+            t == changeBasisAll (changeBasisAll t [[2,5],[1,3]])
+                [[3,-5],[-1,2]]
     , SC.testProperty "changeBasis id" $
         \(T2 t) ->
             t == changeBasis t [[1, 0], [0, 1]] (Proxy::Proxy '[0])
