@@ -69,7 +69,7 @@ type Ring a = (Rng a, Rig a)
 
 type Field a = (Ring a, WithReciprocals a)
 
-type Module a = (WithNegatives a, Ring (Scalar a))
+type Module a = (WithNegatives a, WithScalars a, Ring (Scalar a))
 
 type VectorSpace a = (Module a, Field (Scalar a))
 
