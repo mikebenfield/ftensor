@@ -47,7 +47,7 @@ class Multiplicative a where
 class Multiplicative a => WithOne a where
     one :: a
 
-infixl 6 /.
+infixl 7 /.
 
 class WithOne a => WithReciprocals a where
     inv :: a -> a
