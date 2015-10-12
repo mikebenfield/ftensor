@@ -1,3 +1,11 @@
+{-|
+Module: Math.FTensor.General
+Copyright: (c) 2015 Michael Benfield
+License: BSD-3
+
+General tensor types.
+-}
+
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFoldable #-}
@@ -38,6 +46,11 @@ module Math.FTensor.General (
     changeBasisAll,
 
     -- * Constraints
+    -- | Part of the implementation for these algorithms happens at the type
+    -- level, and that is contained in these constraints. For many users of
+    -- this library, this may be considered an implementation detail. But some
+    -- users writing general functions may have need of these constraints.
+
     PIndexConstraint,
     GenerateConstraint,
     TensorProductConstraint,
@@ -164,6 +177,13 @@ type PIndexConstraint a e (dims::[Nat]) (multiIndex::[Nat]) =
     , KnownNat (MultiIndexToI dims multiIndex)
     )
 
+-- | Pick a component of a tensor via a type level multi index. May be more
+-- efficient than @unsafeIndex@, @index@, or @maybeIndex@ because the offset
+-- into the underlying array is computed at compile time.
+--
+-- >>> let (x::TensorBoxed '[2, 2] Int) = fromList [[0, 1], [2, 3]]
+-- >>> pIndex x (Proxy::Proxy '[1, 0])
+-- 2
 pIndex
     :: forall a e (dims::[Nat]) (multiIndex::[Nat]).
     PIndexConstraint a e dims multiIndex
@@ -172,6 +192,14 @@ pIndex
     -> e
 pIndex (Tensor arr) p = A.index arr (multiIndexToI' (Proxy::Proxy dims) p)
 
+-- | Unsafely access a component of a tensor via a term level multi index. Will
+-- perform bounds checks when the package is compiled with the Cabal option
+-- -fUnsafeChecks (off by default). Example (assuming @N@ and @(:-)@ from
+-- @Math.FTensor.SizedList@ are in scope):
+--
+-- >>> let (x::TensorBoxed '[2, 2] Int) = fromList [[0, 1], [2, 3]]
+-- >>> unsafeIndex x (1:-0:-N)
+-- 2
 unsafeIndex
     :: forall a e (dims::[Nat]).
     ( A.Array a e
@@ -190,6 +218,14 @@ unsafeIndex (Tensor arr) multiIndex =
       p :: Proxy dims
       p = Proxy
 
+-- | Access a component of a tensor via a term level multi index. Will perform
+-- bounds checks when the package is compiled with the Cabal option
+-- -fBoundsChecks (on by default). Example (assuming @N@ and @(:-)@ from
+-- @Math.FTensor.SizedList@ are in scope):
+--
+-- >>> let (x::TensorBoxed '[2, 2] Int) = fromList [[0, 1], [2, 3]]
+-- >>> index x (1:-0:-N)
+-- 2
 index
     :: forall a e (dims::[Nat]).
     ( A.Array a e
@@ -208,6 +244,14 @@ index t multiIndex =
       p :: Proxy dims
       p = Proxy
 
+-- | Safely access a component of a tensor via a term level multi index.
+-- Gives @Nothing@ if the indicated multi index is out of bounds.
+-- Example (assuming @N@ and @(:-)@ from
+-- @Math.FTensor.SizedList@ are in scope):
+--
+-- >>> let (x::TensorBoxed '[2, 2] Int) = [[0, 1], [2, 3]]
+-- >>> maybeIndex x (1:-0:-N)
+-- Just 2
 maybeIndex
     :: forall a e (dims::[Nat]).
     ( A.Array a e
@@ -220,6 +264,8 @@ maybeIndex t multiIndex
   | inBounds (Proxy::Proxy dims) multiIndex = Just $ unsafeIndex t multiIndex
   | otherwise = Nothing
 
+-- | A tensor with an empty dimension list is essentially a scalar. This
+-- function accesses the scalar.
 scalar :: A.Array a e => Tensor a '[] e -> e
 scalar (Tensor arr) =
     INTERNAL_CHECK
@@ -236,6 +282,8 @@ type GenerateConstraint a e (dims::[Nat]) =
     , KnownNat (Product dims)
     )
 
+-- | @generate f@: Creates the tensor whose value at component with multi index
+-- @mi@ is @f mi@.
 generate
     :: forall a e (dims::[Nat]).
     GenerateConstraint a e dims
@@ -248,20 +296,23 @@ generate f = Tensor $ fromListN len (fmap f lists)
     lists :: [MultiIndex dims]
     lists = summon (Proxy::Proxy (AllMultiIndicesInBounds dims))
 
-{-# INLINE[1] convert #-}
+-- | Convert between two tensors with different underlying array types.
 convert
     :: (A.Array a e, A.Array b e)
     => Tensor a dims e
     -> Tensor b dims e
 convert (Tensor arr) = Tensor $ A.convert arr
+{-# INLINE[1] convert #-}
 
 {-# RULES "convert/id" convert = id #-}
 
+-- | Turn a scalar into a tensor with empty dimension list.
 tensor :: A.Array a e => e -> Tensor a '[] e
 tensor x = Tensor (A.generate 1 $ const x)
 
 -- * Mathematical operations
 
+-- | Multiply each component of the tensor by the given scalar.
 scale
     :: (Multiplicative e, A.Array a e)
     => Tensor a dims e
@@ -270,6 +321,7 @@ scale
 scale (Tensor arr) factor =
     Tensor $ A.generate (A.length arr) ((*.factor) . A.index arr)
 
+-- | Add tensors componentwise.
 add
     :: (Additive e, A.Array a e)
     => Tensor a dims e
@@ -284,6 +336,7 @@ add (Tensor arr1) (Tensor arr2) =
             (A.length arr1)
             (\i -> A.index arr1 i +. A.index arr2 i)
 
+-- | Subtract tensors componentwise.
 minus
     :: (WithNegatives e, A.Array a e)
     => Tensor a dims e
@@ -305,6 +358,8 @@ type TensorProductConstraint a e (ds1::[Nat]) (ds2::[Nat]) =
     , KnownNat (Product ds2)
     )
 
+-- | Find the tensor product of the two tensors, in the basis obtained by
+-- the tensor products of the two bases.
 tensorProduct
     :: forall a e (ds1::[Nat]) (ds2::[Nat])
     . TensorProductConstraint a e ds1 ds2
@@ -361,6 +416,11 @@ contract_ ContractArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
     in
     mapM_ middleLoop [0, firstOffset .. firstCount*firstOffset-1]
 
+-- | Contract a tensor on the given slots.
+--
+-- >>> let (x::TensorBoxed '[2,2] Int) = fromList [[1,2],[3,4]]
+-- >>> contract x (Proxy::Proxy 0) (Proxy::Proxy 1)
+-- 5
 contract
     :: forall a e (dims::[Nat]) (i::Nat) (j::Nat)
     . ContractConstraint a e dims i j
@@ -430,6 +490,8 @@ type family Offsets_ (dims::[Nat]) :: [Nat] where
     Offsets_ '[] = '[1]
     Offsets_ (dim ': dims) = (dim * Head (Offsets_ dims)) ': Offsets_ dims
 
+-- | Compute the trace of a square matrix. This is equivalent to contracting
+-- the matrix on its two slots.
 trace
     :: forall a e (dim::Nat)
     . (Additive e, KnownType dim Int, A.Array a e)
@@ -443,6 +505,8 @@ trace (Tensor arr) = f dim1 (A.index arr 0)
     len = A.length arr
     dim1 = 1 + summon (Proxy::Proxy dim)
 
+-- | Find the dot product of two vectors. This is equivalent to taking the
+-- tensor product of the vectors and then contracting on the two slots.
 dot
     :: (Additive e, Multiplicative e, A.Array a e)
     => Tensor a '[dim] e
@@ -518,6 +582,8 @@ mul_ MulArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
     in
     mapM_ outerMiddleLoop [0, firstOffset1 .. firstOffset1*firstCount1 - 1]
 
+-- | Applying @mul@ to two tensors is equivalent to taking their
+-- @tensorProduct@ and then contracting on the two adjusted slots.
 mul
     :: forall a e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat)
     . MulConstraint a e dims1 dims2 i j

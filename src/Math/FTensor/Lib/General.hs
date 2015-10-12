@@ -1,3 +1,14 @@
+{-|
+Module: Math.FTensor.Lib.General
+Copyright: (c) 2015 Michael Benfield
+License: BSD-3
+
+Functions and type families useful in implementing tensor types.
+
+Like other modules under @Math.FTensor.Lib@, casual users of the library should
+not need to directly use this module.
+-}
+
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}

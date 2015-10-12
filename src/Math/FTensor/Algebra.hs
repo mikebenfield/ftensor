@@ -1,3 +1,39 @@
+{-|
+Module: Math.FTensor.Algebra
+Copyright: (c) 2015 Michael Benfield
+License: BSD-3
+
+Classes supporting arithmetic operations. Haskell's numeric classes are too
+coarse for our needs. Types which are instances of more than one of these
+classes should satisfy the obvious compatibility relations between the various
+operations.
+
+For instance, the equalities @x -. x = zero@ and @x *. (y +. z) = x *. y +. x
+*. z@ and @one *. x = x@ should hold. If the type in question implements
+inexact arithmetic, they should hold approximately.
+
+For an instance of @Num@, these should hold whenever the type is also an
+instance of the classes defining these functions:
+
+* @(+.) = (+)@
+
+* @(*.) = (*)@
+
+* @(-.) = (-)@
+
+* @neg = negate@
+
+* @one = fromInteger 1@
+
+* @zero = fromInteger 0@
+
+Similarly, for an instance of @Fractional@
+
+* @(\/.) = (\/)@
+
+* @inv = recip@
+-}
+
 {-# LANGUAGE CPP #-}
 
 module Math.FTensor.Algebra (
@@ -30,40 +66,71 @@ infixl 6 +.
 class Additive a where
     (+.) :: a -> a -> a
 
+-- | Types that have an additive identity. Should satisfy:
+--
+-- * @x +. zero = zero +. x = x@
 class Additive a => WithZero a where
     zero :: a
 
 infixl 6 -.
 
+-- | Types that have additive inverses. Should satisfy:
+-- @neg x = zero -. x@ and @x -. x = zero@.
 class WithZero a => WithNegatives a where
+    {-# MINIMAL neg | (-.) #-}
     neg :: a -> a
+    neg x = zero -. x
     (-.) :: a -> a -> a
+    lhs -. rhs = lhs +. neg rhs
 
 infixl 7 *.
 
 class Multiplicative a where
     (*.) :: a -> a -> a
 
+-- | Types with a multiplicative identity. Should satisfy:
+--
+-- * @one *. x = x *. one = x@.
 class Multiplicative a => WithOne a where
     one :: a
 
 infixl 7 /.
 
+-- | Types with multiplicative inverse.
+-- @inv x@ and @y /. x@
+-- may throw an exception or behave in undefined ways if
+-- @invertible x = False@.
+--
+-- * @inv x = one ./ x@ 
+--
+-- * @y *. x /. y = x@ 
+--
+-- * @x /. y *. x = y@
 class WithOne a => WithReciprocals a where
+
+    {-# MINIMAL invertible, (inv | (/.)) #-}
     invertible :: a -> Bool
+
     inv :: a -> a
+    inv x = one /. x
+
     (/.) :: a -> a -> a
+    lhs /. rhs = lhs *. inv rhs
 
 infixl 7 *:
 
+-- | Types like mathematical vectors that can be multiplied by another type.
 class WithScalars a where
     type Scalar a
     (*:) :: Scalar a -> a -> a
 
+-- | A @Rg@ is a Ring without one or negatives.
 type Rg a = (WithZero a, Multiplicative a)
 
+-- | A @Rng@ is a Ring without one.
 type Rng a = (Rg a, WithNegatives a)
 
+-- | A @Rig@ is a Ring without negatives.
 type Rig a = (Rg a, WithOne a)
 
 type Ring a = (Rng a, Rig a)

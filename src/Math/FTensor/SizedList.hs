@@ -1,3 +1,13 @@
+{-|
+Module: Math.FTensor.SizedList
+Copyright: (c) 2015 Michael Benfield
+License: BSD-3
+
+Lists carrying their size in their type. These are used for runtime indexing
+into tensors. Many of the functions duplicate functionality for lists from
+Haskell's @Prelude@.
+-}
+
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -116,6 +126,7 @@ splitAt nP list = unsafeSplitAt (fromIntegral $ natVal nP) list
         in
         unsafeCoerce (head (unsafeCoerce list) :- first, second)
 
+-- | Dot product.
 sDot :: Num a => SizedList n a -> SizedList n a -> a
 sDot N N = 0
 sDot (x:-xs) (y:-ys) = x*y + sDot xs ys
@@ -155,6 +166,8 @@ instance KnownNat n => IsList (SizedList n a) where
 
     toList = toList'
 
+-- | Since this function can be called without requiring @KnownNat n@,
+-- an implementation separate from the @IsList@ class is provided.
 toList' :: SizedList n a -> [a]
 toList' N = []
 toList' (x:-xs) = x : toList' xs

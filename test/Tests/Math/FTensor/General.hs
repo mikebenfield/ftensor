@@ -11,7 +11,7 @@
 module Tests.Math.FTensor.General (
     tests
 ) where
-import qualified Debug.Trace as D
+
 import Data.Proxy
 import GHC.Exts (IsList(..))
 
