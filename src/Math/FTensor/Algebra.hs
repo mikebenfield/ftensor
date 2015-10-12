@@ -50,6 +50,7 @@ class Multiplicative a => WithOne a where
 infixl 7 /.
 
 class WithOne a => WithReciprocals a where
+    invertible :: a -> Bool
     inv :: a -> a
     (/.) :: a -> a -> a
 
@@ -104,6 +105,8 @@ instance ctxt Additive (typ) where { \
 #define INSTANCES_FRACTIONAL(typ, ctxt) \
 INSTANCES_NUM(typ, ctxt) ; \
 instance ctxt WithReciprocals (typ) where { \
+; {-# INLINE invertible #-} \
+; invertible = (/= 0) \
 ; {-# INLINE inv #-} \
 ; inv = recip \
 ; {-# INLINE (/.) #-} \

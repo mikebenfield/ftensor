@@ -691,6 +691,9 @@ instance (WithOne e, TensorC a m e)
 instance (WithReciprocals e, TensorC a m e)
     => WithReciprocals (Tensor a '[] e) where
 
+    {-# INLINE invertible #-}
+    invertible = invertible . scalar
+
     {-# INLINE inv #-}
     inv = tensor . inv . scalar
 
