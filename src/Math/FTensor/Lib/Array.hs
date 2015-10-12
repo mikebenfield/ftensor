@@ -9,8 +9,6 @@ module Math.FTensor.Lib.Array (
     write,
     ArrayPrim,
     ArrayBoxed,
-    MutableArrayPrim,
-    MutableArrayBoxed,
     Prim(..),
     generate,
     unfoldN,
@@ -35,21 +33,22 @@ import qualified Data.Primitive.ByteArray as BA
 
 import Math.FTensor.Internal.Check
 
-class (IsList a) => Array a m | a -> m, m -> a where
-    basicIndex :: a -> Int -> Item a
-    length :: a -> Int
-    new :: Int -> ST s (m s)
-    replicate :: Int -> Item a -> a
+class (IsList (a e), Item (a e) ~ e) => Array a e where
+    data Mutable s a e
+    basicIndex :: a e -> Int -> e
+    length :: a e -> Int
+    new :: Int -> ST s (Mutable s a e)
+    replicate :: Int -> e -> a e
     replicate i x = generate i (const x)
-    mLength :: m s -> Int
-    basicRead :: m s -> Int -> ST s (Item a)
-    basicWrite :: m s -> Int -> Item a -> ST s ()
-    copy :: m s -> Int -> a -> Int -> Int -> ST s ()
-    copyM :: m s -> Int -> m s -> Int -> Int -> ST s ()
-    freeze :: m s -> ST s a
+    mLength :: Mutable s a e -> Int
+    basicRead :: Mutable s a e -> Int -> ST s e
+    basicWrite :: Mutable s a e -> Int -> e -> ST s ()
+    copy :: Mutable s a e -> Int -> a e -> Int -> Int -> ST s ()
+    copyM :: Mutable s a e -> Int -> Mutable s a e -> Int -> Int -> ST s ()
+    freeze :: Mutable s a e -> ST s (a e)
 
 {-# INLINE index #-}
-index :: Array a m => a -> Int -> Item a
+index :: Array a e => a e -> Int -> e
 index = \a i ->
     UNSAFE_CHECK
         (0 <= i && i < length a)
@@ -58,7 +57,7 @@ index = \a i ->
         $ basicIndex a i
 
 {-# INLINE read #-}
-read :: Array a m => m s -> Int -> ST s (Item a)
+read :: Array a e => Mutable s a e -> Int -> ST s e
 read = \m i ->
     UNSAFE_CHECK
         (0 <= i && i < mLength m)
@@ -67,7 +66,7 @@ read = \m i ->
         $ basicRead m i
 
 {-# INLINE write #-}
-write :: Array a m => m s -> Int -> Item a -> ST s ()
+write :: Array a e => Mutable s a e -> Int -> e -> ST s ()
 write = \m i x ->
     UNSAFE_CHECK
         (0 <= i && i < mLength m)
@@ -75,31 +74,29 @@ write = \m i x ->
         (i, mLength m)
         $ basicWrite m i x
 
-arrayFromList :: Array a m => [Item a] -> a
+arrayFromList :: Array a e => [e] -> a e
 arrayFromList lst = arrayFromListN (Prelude.length lst) lst
 
-arrayFromListN :: Array a m => Int -> [Item a] -> a
+arrayFromListN :: Array a e => Int -> [e] -> a e
 arrayFromListN len lst = unfoldN len f lst
   where
     f [] = error "fromListN: can't happen"
     f (x:xs) = (x, xs)
 
-arrayToList :: Array a m => a -> [Item a]
+arrayToList :: Array a e => a e -> [e]
 arrayToList arr = loop 0
   where
     loop i
       | i < length arr = index arr i : loop (i+1)
       | otherwise = []
 
-arrayEq :: (Eq (Item a), Array a m) => a -> a -> Bool
+arrayEq :: (Eq e, Array a e) => a e -> a e -> Bool
 arrayEq lhs rhs = len == length rhs && all f [0..len-1]
   where
     f i = index rhs i == index lhs i
     len = length lhs
 
 newtype ArrayPrim e = ArrayPrim BA.ByteArray
-
-newtype MutableArrayPrim e s = MutableArrayPrim (BA.MutableByteArray s)
 
 instance NFData (ArrayPrim e) where
     rnf (ArrayPrim a) = a `seq` ()
@@ -116,7 +113,9 @@ instance Prim e => IsList (ArrayPrim e) where
     fromListN = arrayFromListN
     toList = arrayToList
 
-instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
+instance Prim e => Array ArrayPrim e where
+    newtype Mutable s ArrayPrim e = MutableArrayPrim (BA.MutableByteArray s)
+
     {-# INLINE basicIndex #-}
     basicIndex = \(ArrayPrim ba) i -> BA.indexByteArray ba i
 
@@ -159,8 +158,6 @@ instance Prim e => Array (ArrayPrim e) (MutableArrayPrim e) where
     freeze = \(MutableArrayPrim mba) ->
         ArrayPrim <$> BA.unsafeFreezeByteArray mba
 
-newtype MutableArrayBoxed a s = MutableArrayBoxed (A.MutableArray s a)
-
 newtype ArrayBoxed e = ArrayBoxed (A.Array e)
 
 instance Eq e => Eq (ArrayBoxed e) where
@@ -196,7 +193,9 @@ instance Traversable ArrayBoxed where
 instance Functor ArrayBoxed where
     fmap = map
 
-instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
+instance Array ArrayBoxed e where
+    newtype Mutable s ArrayBoxed e = MutableArrayBoxed (A.MutableArray s e)
+
     {-# INLINE basicIndex #-}
     basicIndex = \(ArrayBoxed a) -> A.indexArray a
 
@@ -232,14 +231,14 @@ instance Array (ArrayBoxed e) (MutableArrayBoxed e) where
     {-# INLINE freeze #-}
     freeze = \(MutableArrayBoxed ma) -> ArrayBoxed <$> A.unsafeFreezeArray ma
 
-generate :: Array a m => Int -> (Int -> Item a) -> a
+generate :: Array a e => Int -> (Int -> e) -> a e
 generate len f = runST $ do
     newArr <- new len
     let at i = write newArr i (f i)
     mapM_ at [0..len-1]
     freeze newArr
 
-unfoldN :: Array a m => Int -> (b -> (Item a, b)) -> b -> a
+unfoldN :: Array a e => Int -> (b -> (e, b)) -> b -> a e
 unfoldN len f init = runST $ do
     newArr <- new len
     ref <- newSTRef init
@@ -252,10 +251,10 @@ unfoldN len f init = runST $ do
     freeze newArr
 
 {-# INLINE[1] convert #-}
-convert :: (Array a m, Array b n, Item a ~ Item b) => a -> b
+convert :: (Array a e, Array b e) => a e -> b e
 convert arr = generate (length arr) (index arr)
 
 {-# RULES "convert/id" convert = id #-}
 
-map :: (Array a m, Array b n) => (Item a -> Item b) -> a -> b
+map :: (Array a e, Array b d) => (e -> d) -> a e -> b d
 map f arr = generate (length arr) (f . index arr)

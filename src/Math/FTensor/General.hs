@@ -9,13 +9,11 @@
 module Math.FTensor.General (
     -- * Types
     Tensor(..),
-    TensorC,
     TensorBoxed,
     TensorPrim,
     MultiIndex,
 
     -- * Indexing
-    PIndexConstraint,
     pIndex,
     unsafeIndex,
     index,
@@ -39,7 +37,8 @@ module Math.FTensor.General (
     changeBasis,
     changeBasisAll,
 
-    -- * Type families
+    -- * Constraints
+    PIndexConstraint,
     GenerateConstraint,
     TensorProductConstraint,
     ContractConstraint,
@@ -73,14 +72,12 @@ import Math.FTensor.SizedList
 newtype Tensor a (dims::[Nat]) e = Tensor (a e)
   deriving (Eq, Show, Functor, Traversable, Foldable)
 
-type TensorC a m e = (A.Array (a e) m, Item (a e) ~ e)
-
 instance NFData (a e) => NFData (Tensor a dims e) where
     rnf (Tensor arr) = rnf arr
 
 instance
     ( dims ~ (d ': ds)
-    , TensorC a m e
+    , A.Array a e
     , IsList (TaggedList dims e)
     , Item (TaggedList dims e) ~ IsListItem dims e
     , KnownNat (Product dims)
@@ -107,31 +104,31 @@ instance
 
     toList = undefined
 
-type TensorBoxed (dims::[Nat]) e = Tensor A.ArrayBoxed dims e
+type TensorBoxed = Tensor A.ArrayBoxed
 
-type TensorPrim (dims::[Nat]) e = Tensor A.ArrayPrim dims e
+type TensorPrim = Tensor A.ArrayPrim
 
 type MultiIndex (dims::[Nat]) = SizedList (Length dims) Int
 
 -- * Indexing
 
-type PIndexConstraint a m e (dims::[Nat]) (multiIndex::[Nat]) =
-    ( TensorC a m e
+type PIndexConstraint a e (dims::[Nat]) (multiIndex::[Nat]) =
+    ( A.Array a e
     , InBounds dims multiIndex
     , KnownNat (MultiIndexToI dims multiIndex)
     )
 
 pIndex
-    :: forall a m e (dims::[Nat]) (multiIndex::[Nat]).
-    PIndexConstraint a m e dims multiIndex
+    :: forall a e (dims::[Nat]) (multiIndex::[Nat]).
+    PIndexConstraint a e dims multiIndex
     => Tensor a dims e
     -> Proxy multiIndex
     -> e
 pIndex (Tensor arr) p = A.index arr (multiIndexToI' (Proxy::Proxy dims) p)
 
 unsafeIndex
-    :: forall a m e (dims::[Nat]).
-    ( TensorC a m e
+    :: forall a e (dims::[Nat]).
+    ( A.Array a e
     , KnownType dims (MultiIndex dims)
     )
     => Tensor a dims e
@@ -148,8 +145,8 @@ unsafeIndex (Tensor arr) multiIndex =
       p = Proxy
 
 index
-    :: forall a m e (dims::[Nat]).
-    ( TensorC a m e
+    :: forall a e (dims::[Nat]).
+    ( A.Array a e
     , KnownType dims (MultiIndex dims)
     )
     => Tensor a dims e
@@ -166,8 +163,8 @@ index t multiIndex =
       p = Proxy
 
 maybeIndex
-    :: forall a m e (dims::[Nat]).
-    ( TensorC a m e
+    :: forall a e (dims::[Nat]).
+    ( A.Array a e
     , KnownType dims (MultiIndex dims)
     )
     => Tensor a dims e
@@ -177,7 +174,7 @@ maybeIndex t multiIndex
   | inBounds (Proxy::Proxy dims) multiIndex = Just $ unsafeIndex t multiIndex
   | otherwise = Nothing
 
-scalar :: TensorC a m e => Tensor a '[] e -> e
+scalar :: A.Array a e => Tensor a '[] e -> e
 scalar (Tensor arr) =
     INTERNAL_CHECK
         (A.length arr == 1)
@@ -187,15 +184,15 @@ scalar (Tensor arr) =
 
 -- * Creating
 
-type GenerateConstraint a m e (dims::[Nat]) =
-    ( TensorC a m e
+type GenerateConstraint a e (dims::[Nat]) =
+    ( A.Array a e
     , KnownType (AllMultiIndicesInBounds dims) [MultiIndex dims]
     , KnownNat (Product dims)
     )
 
 generate
-    :: forall a m e (dims::[Nat]).
-    GenerateConstraint a m e dims
+    :: forall a e (dims::[Nat]).
+    GenerateConstraint a e dims
     => (MultiIndex dims -> e)
     -> Tensor a dims e
 generate f = Tensor $ fromListN len (fmap f lists)
@@ -206,18 +203,21 @@ generate f = Tensor $ fromListN len (fmap f lists)
     lists = summon (Proxy::Proxy (AllMultiIndicesInBounds dims))
 
 {-# INLINE[1] convert #-}
-convert :: (TensorC a m e, TensorC b n e) => Tensor a dims e -> Tensor b dims e
+convert
+    :: (A.Array a e, A.Array b e)
+    => Tensor a dims e
+    -> Tensor b dims e
 convert (Tensor arr) = Tensor $ A.convert arr
 
 {-# RULES "convert/id" convert = id #-}
 
-tensor :: TensorC a m e => e -> Tensor a '[] e
+tensor :: A.Array a e => e -> Tensor a '[] e
 tensor x = Tensor (A.generate 1 $ const x)
 
 -- * Mathematical operations
 
 scale
-    :: (Multiplicative e, TensorC a m e)
+    :: (Multiplicative e, A.Array a e)
     => Tensor a dims e
     -> e
     -> Tensor a dims e
@@ -225,7 +225,7 @@ scale (Tensor arr) factor =
     Tensor $ A.generate (A.length arr) ((*.factor) . A.index arr)
 
 add
-    :: (Additive e, TensorC a m e)
+    :: (Additive e, A.Array a e)
     => Tensor a dims e
     -> Tensor a dims e
     -> Tensor a dims e
@@ -239,7 +239,7 @@ add (Tensor arr1) (Tensor arr2) =
             (\i -> A.index arr1 i +. A.index arr2 i)
 
 minus
-    :: (WithNegatives e, TensorC a m e)
+    :: (WithNegatives e, A.Array a e)
     => Tensor a dims e
     -> Tensor a dims e
     -> Tensor a dims e
@@ -252,17 +252,16 @@ minus (Tensor arr1) (Tensor arr2) =
             (A.length arr1)
             (\i -> A.index arr1 i -. A.index arr2 i)
 
-type TensorProductConstraint a m e (ds1::[Nat]) (ds2::[Nat]) =
-    ( TensorC a m e
+type TensorProductConstraint a e (ds1::[Nat]) (ds2::[Nat]) =
+    ( A.Array a e
     , Multiplicative e
     , KnownNat (Product ds1)
     , KnownNat (Product ds2)
     )
 
-
 tensorProduct
-    :: forall a m e (ds1::[Nat]) (ds2::[Nat])
-    . TensorProductConstraint a m e ds1 ds2
+    :: forall a e (ds1::[Nat]) (ds2::[Nat])
+    . TensorProductConstraint a e ds1 ds2
     => Tensor a ds1 e
     -> Tensor a ds2 e
     -> Tensor a (ds1 ++ ds2) e
@@ -317,8 +316,8 @@ contract_ ContractArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
     mapM_ middleLoop [0, firstOffset .. firstCount*firstOffset-1]
 
 contract
-    :: forall a m e (dims::[Nat]) (i::Nat) (j::Nat)
-    . ContractConstraint a m e dims i j
+    :: forall a e (dims::[Nat]) (i::Nat) (j::Nat)
+    . ContractConstraint a e dims i j
     => Tensor a dims e
     -> Proxy i
     -> Proxy j
@@ -339,7 +338,7 @@ contract (Tensor arr) _ _ = Tensor $ runST $ do
         }
     A.freeze newArr
 
-type ContractConstraint a m e (dims::[Nat]) (i::Nat) (j::Nat) =
+type ContractConstraint a e (dims::[Nat]) (i::Nat) (j::Nat) =
     ( Equal i j ~ 'False
     , i+1 <= Length dims
     , j+1 <= Length dims
@@ -353,7 +352,7 @@ type ContractConstraint a m e (dims::[Nat]) (i::Nat) (j::Nat) =
     , KnownNat (MiddleCount dims i j)
     , KnownNat (LastCount dims i j)
     , Additive e
-    , TensorC a m e
+    , A.Array a e
     )
 
 type FirstOffset (dims::[Nat]) (i::Nat) (j::Nat) =
@@ -386,8 +385,8 @@ type family Offsets_ (dims::[Nat]) :: [Nat] where
     Offsets_ (dim ': dims) = (dim * Head (Offsets_ dims)) ': Offsets_ dims
 
 trace
-    :: forall a m e (dim::Nat)
-    . (KnownType dim Int, TensorC a m e, Additive e)
+    :: forall a e (dim::Nat)
+    . (Additive e, KnownType dim Int, A.Array a e)
     => Tensor a '[dim, dim] e
     -> e
 trace (Tensor arr) = f dim1 (A.index arr 0)
@@ -399,7 +398,7 @@ trace (Tensor arr) = f dim1 (A.index arr 0)
     dim1 = 1 + summon (Proxy::Proxy dim)
 
 dot
-    :: (Additive e, Multiplicative e, TensorC a m e)
+    :: (Additive e, Multiplicative e, A.Array a e)
     => Tensor a '[dim] e
     -> Tensor a '[dim] e
     -> e
@@ -417,10 +416,10 @@ dot (Tensor arr1) (Tensor arr2) =
     len1 = A.length arr1
     len2 = A.length arr2
 
-type MulConstraint a m e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat) =
+type MulConstraint a e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat) =
     ( Additive e
     , Multiplicative e
-    , TensorC a m e
+    , A.Array a e
     , (dims1 !! i) ~ (dims2 !! j)
     , KnownNat (Product (MulNewDims dims1 i dims2 j))
     , KnownNat (IOffset dims1 i)
@@ -474,8 +473,8 @@ mul_ MulArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
     mapM_ outerMiddleLoop [0, firstOffset1 .. firstOffset1*firstCount1 - 1]
 
 mul
-    :: forall a m e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat)
-    . MulConstraint a m e dims1 dims2 i j
+    :: forall a e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat)
+    . MulConstraint a e dims1 dims2 i j
     => Tensor a dims1 e
     -> Proxy i
     -> Tensor a dims2 e
@@ -516,7 +515,7 @@ type family AllEq (n::Nat) (ns::[Nat]) :: Bool where
 type ChangeBasisConstraint a m e dims dim slots =
     ( Additive e
     , Multiplicative e
-    , TensorC a m e
+    , A.Array a e
     , ChangeBasisClass dims dim slots
     )
 
@@ -570,8 +569,8 @@ changeBasis1_ ChangeBasisArguments{..} = do
 
 class ChangeBasisClass (dims::[Nat]) (dim::Nat) (slots::[Nat]) where
     changeBasis_
-        :: forall a m e
-        . (Additive e, Multiplicative e, TensorC a m e)
+        :: forall a e
+        . (Additive e, Multiplicative e, A.Array a e)
         => Tensor a dims e
         -> Tensor a [dim, dim] e
         -> Proxy slots
@@ -622,10 +621,10 @@ type family NotIn (list::[Nat]) (item::Nat) :: Constraint where
     NotIn (x ': xs) y = NotIn xs y
 
 changeBasisAll
-    :: forall a m e (dim::Nat) (dims::[Nat])
+    :: forall a e (dim::Nat) (dims::[Nat])
     . (Additive e, Multiplicative e, AllEq dim dims ~ 'True,
       dim ~ (dims !! 0),
-      KnownNat dim, GenerateConstraint a m e dims,
+      KnownNat dim, GenerateConstraint a e dims,
       KnownType dims (MultiIndex dims))
     => Tensor a dims e
     -> Tensor a [dim, dim] e
@@ -641,13 +640,13 @@ changeBasisAll t m = generate f
     lists :: [MultiIndex dims]
     lists = summon (Proxy::Proxy (AllMultiIndicesInBounds dims))
 
-instance (Additive e, TensorC a m e) => Additive (Tensor a dims e) where
+instance (Additive e, A.Array a e) => Additive (Tensor a dims e) where
     {-# INLINE (+.) #-}
     (+.) = add
 
 instance
     ( WithZero e
-    , TensorC a m e
+    , A.Array a e
     , KnownNat (Product dims)
     )
     => WithZero (Tensor a dims e) where
@@ -658,7 +657,7 @@ instance
 instance
     ( WithNegatives e
     , WithZero (Tensor a dims e)
-    , TensorC a m e
+    , A.Array a e
     )
     => WithNegatives (Tensor a dims e) where
 
@@ -668,7 +667,7 @@ instance
     {-# INLINE (-.) #-}
     (-.) = minus
 
-instance (Multiplicative e, TensorC a m e)
+instance (Multiplicative e, A.Array a e)
     => WithScalars (Tensor a dims e) where
 
     type Scalar (Tensor a dims e) = e
@@ -676,19 +675,19 @@ instance (Multiplicative e, TensorC a m e)
     {-# INLINE (*:) #-}
     (*:) = flip scale
 
-instance (Multiplicative e, TensorC a m e)
+instance (Multiplicative e, A.Array a e)
     => Multiplicative (Tensor a '[] e) where
 
     {-# INLINE (*.) #-}
     lhs *. rhs = tensor (scalar lhs *. scalar rhs)
 
-instance (WithOne e, TensorC a m e)
+instance (WithOne e, A.Array a e)
     => WithOne (Tensor a '[] e) where
 
     {-# INLINE one #-}
     one = tensor one
 
-instance (WithReciprocals e, TensorC a m e)
+instance (WithReciprocals e, A.Array a e)
     => WithReciprocals (Tensor a '[] e) where
 
     {-# INLINE invertible #-}
