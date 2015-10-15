@@ -47,7 +47,9 @@ module Math.FTensor.General (
     ContractedDims,
 ) where
 
+import Control.Monad (replicateM)
 import Control.Monad.ST (runST, ST)
+import Data.Foldable (traverse_)
 import Data.Proxy
 import Data.STRef
 import GHC.Exts (Constraint, IsList(..))
@@ -55,7 +57,6 @@ import GHC.TypeLits
 
 import Control.DeepSeq
 
-import Math.FTensor.Internal.TaggedList
 import qualified Math.FTensor.Internal.Check
 
 import Math.FTensor.Lib.General
@@ -70,39 +71,84 @@ import Math.FTensor.SizedList
 -- * Types
 
 newtype Tensor a (dims::[Nat]) e = Tensor (a e)
-  deriving (Eq, Show, Functor, Traversable, Foldable)
+  deriving (Eq, Functor, Traversable, Foldable)
+
+instance (Show e, A.Array a e) => Show (Tensor a '[] e) where
+    showsPrec d (Tensor arr) =
+        showParen (d >= 10) $ showString "tensor " . shows (A.index arr 0)
+
+instance (Show (ItemType (d ': ds) e), IsList (Tensor a (d ': ds) e))
+    => Show (Tensor a (d ': ds) e) where
+
+    showsPrec i = showsPrec i . toList
 
 instance NFData (a e) => NFData (Tensor a dims e) where
     rnf (Tensor arr) = rnf arr
 
+-- | This class exists only to implement @IsList@ for @Tensor@
+class BuilderConsumer t e (lengths::[Nat]) | e lengths -> t where
+
+    -- | @consume@ is really the same idea as @traverse@, but I want to apply
+    -- it to a nested list.
+    consume :: Applicative a => Proxy lengths -> (e -> a ()) -> t -> a ()
+
+    build :: Monad m => Proxy lengths -> m e -> m t
+
+instance BuilderConsumer e e '[] where
+    consume _ f e = f e
+    build _ f = f
+
+instance (BuilderConsumer contained e lengths, KnownNat length)
+    => BuilderConsumer [contained] e (length ': lengths) where
+
+    consume _ f list =
+        UNSAFE_CHECK
+            (length' == Prelude.length list)
+            "fromList"
+            (length', Prelude.length list)
+            $ traverse_ (consume (Proxy::Proxy lengths) f) list
+      where
+        length' :: Int
+        length' = summon (Proxy::Proxy length)
+
+    build _ f = replicateM length (build (Proxy::Proxy lengths) f)
+      where
+        length :: Int
+        length = summon (Proxy::Proxy length)
+
+type family ItemType (lengths::[Nat]) e where
+    ItemType '[len] e = e
+    ItemType (len ': lens) e = [ItemType lens e]
+
 instance
-    ( dims ~ (d ': ds)
-    , A.Array a e
-    , IsList (TaggedList dims e)
-    , Item (TaggedList dims e) ~ IsListItem dims e
+    ( A.Array a e
+    , BuilderConsumer [ItemType dims e] e dims
     , KnownNat (Product dims)
     )
     => IsList (Tensor a dims e) where
 
-    type Item (Tensor a dims e) = IsListItem dims e
+    type Item (Tensor a dims e) = ItemType dims e
 
-    fromList lst = fromListN (Prelude.length lst) lst
-
-    fromListN len lst =
-        let arrayLen = summon (Proxy::Proxy (Product dims))
-            (lst'::TaggedList dims e) = fromListN len lst
-        in
+    fromList list =
         Tensor $ runST $ do
-            newArr <- A.new arrayLen
+            newArr <- A.new $ summon (Proxy::Proxy (Product dims))
             idx <- newSTRef (0::Int)
             let at x = do
                     i <- readSTRef idx
                     A.write newArr i x
                     writeSTRef idx (i+1)
-            mapM_ at lst'
+            consume (Proxy::Proxy dims) at list
             A.freeze newArr
 
-    toList = undefined
+    fromListN _ = fromList
+
+    toList (Tensor arr) = runST $ do
+        idx <- newSTRef (0::Int)
+        let f = do
+                i <- readSTRef idx
+                writeSTRef idx (i+1)
+                return $ A.index arr i
+        build (Proxy::Proxy dims) f
 
 type TensorBoxed = Tensor A.ArrayBoxed
 

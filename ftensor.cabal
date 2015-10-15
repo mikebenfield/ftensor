@@ -32,7 +32,6 @@ library
     Math.FTensor.Lib.General
     Math.FTensor.Lib.TypeList
     Math.FTensor.Internal.Check
-    Math.FTensor.Internal.TaggedList
     Math.FTensor.SizedList
   build-depends:
     base >=4.8 && <4.9,
