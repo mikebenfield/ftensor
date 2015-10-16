@@ -22,6 +22,7 @@ import qualified Test.Tasty.SmallCheck as SC
 
 import Test.SmallCheck.Series hiding (generate, Positive)
 
+import Math.FTensor.Algebra
 import Math.FTensor.Lib.General
 import Math.FTensor.General
 import Math.FTensor.SizedList
@@ -197,6 +198,15 @@ cobM = [[1,2],[3,4]]
 
 case_changeBasis_1 =
     changeBasis cobTestM cobM (Proxy::Proxy '[0,1]) @?= [[63,145],[143,329]]
+
+case_one_1 =
+    one @?= ([[1]] :: TensorBoxed '[1,1] Int)
+
+case_one_2 =
+    one @?= ([[1,0], [0,1]] :: TensorBoxed '[2,2] Int)
+
+case_one_3 =
+    one @?= ([[1,0,0], [0,1,0], [0,0,1]] :: TensorBoxed '[3,3] Int)
 
 newtype T0 = T0 (TensorBoxed '[] Int)
     deriving (Show, Eq)

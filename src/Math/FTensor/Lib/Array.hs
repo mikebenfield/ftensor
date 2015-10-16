@@ -49,7 +49,6 @@ module Math.FTensor.Lib.Array (
 import Prelude hiding (length, read, map)
 import qualified Prelude
 
-import Control.Monad (liftM)
 import Control.Monad.ST (ST, runST)
 import Data.STRef
 import GHC.Exts (Int(..), sizeofArray#, sizeofMutableArray#, IsList(..))
@@ -74,10 +73,16 @@ class (IsList (a e), Item (a e) ~ e) => Array a e where
     -- | Create a new mutable array of the given length.
     new :: Int -> ST s (Mutable s a e)
 
-    -- | Create a new immutable array of the given length, filled with the
+    -- | Create a new mutable array of the given length, filled with the
     -- given element. A default implementation is provided.
-    replicate :: Int -> e -> a e
-    replicate i x = generate i (const x)
+    replicate :: Int -> e -> ST s (Mutable s a e)
+    replicate len x = do
+        array <- new len
+        let loop i
+              | i < len = write array i x >> loop (i+1) 
+              | otherwise = return ()
+        loop 0
+        return array
 
     -- | Length of a mutable array.
     mLength :: Mutable s a e -> Int
@@ -220,10 +225,10 @@ instance Prim e => Array ArrayPrim e where
         MutableArrayPrim <$> BA.newByteArray (i * I# (sizeOf# (undefined::e)))
 
     {-# INLINE replicate #-}
-    replicate = \i x -> runST $ do
+    replicate = \i x -> do
         mba <- BA.newByteArray (i * I# (sizeOf# (undefined::e)))
         BA.setByteArray mba 0 i x
-        liftM ArrayPrim $ BA.unsafeFreezeByteArray mba
+        return $ MutableArrayPrim mba
 
     {-# INLINE mLength #-}
     mLength = \(MutableArrayPrim mba) -> BA.sizeofMutableByteArray mba
@@ -301,8 +306,7 @@ instance Array ArrayBoxed e where
         (error "uninitialized array element")
 
     {-# INLINE replicate #-}
-    replicate = \i x -> runST $
-        A.newArray i x >>= (freeze . MutableArrayBoxed)
+    replicate = \i x -> MutableArrayBoxed <$> A.newArray i x
 
     {-# INLINE mLength #-}
     mLength = \(MutableArrayBoxed (A.MutableArray ma)) ->

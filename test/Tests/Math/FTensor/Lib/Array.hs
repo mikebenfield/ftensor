@@ -67,13 +67,13 @@ case_convert_6 = index array4 1 @?= 101
 
 case_replicate_1 =
     let rep :: ArrayBoxed Int
-        rep = replicate 5 13
+        rep = runST $ replicate 5 13 >>= freeze
     in
     rep @?= [13,13,13,13,13]
 
 case_replicate_2 =
     let rep :: ArrayPrim Int
-        rep = replicate 5 13
+        rep = runST $ replicate 5 13 >>= freeze
     in
     rep @?= [13,13,13,13,13]
 

@@ -36,7 +36,7 @@ module Math.FTensor.General (
     -- * Mathematical operations
     scale,
     add,
-    minus,
+    sub,
     tensorProduct,
     contract,
     mul,
@@ -44,6 +44,7 @@ module Math.FTensor.General (
     dot,
     changeBasis,
     changeBasisAll,
+    (.*.),
 
     -- * Constraints
     -- | Part of the implementation for these algorithms happens at the type
@@ -351,21 +352,21 @@ add (Tensor arr1) (Tensor arr2) =
 {-# INLINE add #-}
 
 -- | Subtract tensors componentwise.
-minus
+sub
     :: (WithNegatives e, A.Array a e)
     => Tensor a dims e
     -> Tensor a dims e
     -> Tensor a dims e
-minus (Tensor arr1) (Tensor arr2) =
+sub (Tensor arr1) (Tensor arr2) =
     INTERNAL_CHECK
         (A.length arr1 == A.length arr2)
-        "minus"
+        "sub"
         (A.length arr1, A.length arr2)
         $ Tensor $ A.generate
             (A.length arr1)
             (\i -> A.index arr1 i -. A.index arr2 i)
 
-{-# INLINE minus #-}
+{-# INLINE sub #-}
 
 type TensorProductConstraint a e (ds1::[Nat]) (ds2::[Nat]) =
     ( A.Array a e
@@ -784,7 +785,8 @@ instance
     => WithZero (Tensor a dims e) where
 
     {-# INLINE zero #-}
-    zero = Tensor $ A.replicate (summon (Proxy::Proxy (Product dims))) zero
+    zero = Tensor $ runST $
+        A.replicate (summon (Proxy::Proxy (Product dims))) zero >>= A.freeze
 
 instance
     ( WithNegatives e
@@ -797,7 +799,7 @@ instance
     neg = \(Tensor arr) -> Tensor $ A.map neg arr
 
     {-# INLINE (-.) #-}
-    (-.) = minus
+    (-.) = sub
 
 instance (Multiplicative e, A.Array a e)
     => WithScalars (Tensor a dims e) where
@@ -830,3 +832,40 @@ instance (WithReciprocals e, A.Array a e)
 
     {-# INLINE (/.) #-}
     lhs /. rhs = tensor (scalar lhs /. scalar rhs)
+
+infixl 7 .*. 
+
+(.*.)
+    :: forall a e (dims1::[Nat]) (dims2::[Nat])
+    . MulConstraint a e dims1 dims2 (Length dims1 - 1) 0
+    => Tensor a dims1 e
+    -> Tensor a dims2 e
+    -> Tensor a (Delete dims1 (Length dims1 - 1) ++ Delete dims2 0) e
+t1 .*. t2 =
+    mul t1 (Proxy::Proxy (Length dims1 - 1)) t2 (Proxy::Proxy 0)
+
+{-# INLINE (.*.) #-}
+
+instance MulConstraint a e '[dim, dim] '[dim, dim] 1 0
+    => Multiplicative (Tensor a '[dim, dim] e) where
+
+    {-# INLINE (*.) #-}
+    (*.) = (.*.)
+
+instance
+    ( KnownNat dim
+    , A.Array a e
+    , WithOne e
+    , WithZero e
+    , Multiplicative (Tensor a '[dim, dim] e)
+    )
+    => WithOne (Tensor a '[dim, dim] e) where
+
+    {-# INLINABLE one #-}
+    one = Tensor $ runST $ do
+        arr <- A.replicate len zero
+        loop 0 (dim+1) len (\i -> A.write arr i one)
+        A.freeze arr
+      where
+        dim = summon (Proxy::Proxy dim)
+        len = dim*dim
