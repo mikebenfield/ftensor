@@ -508,14 +508,6 @@ type IJOffset (dims::[Nat]) (i::Nat) (j::Nat) =
 type family ContractedDims (xs::[Nat]) (i::Nat) (j::Nat) :: [Nat] where
     ContractedDims xs i j = Delete (Delete xs (Max i j)) (Min i j)
 
-type family Offsets (dims::[Nat]) :: [Nat] where
-    Offsets '[] = '[]
-    Offsets (dim ': dims) = Offsets_ dims
-
-type family Offsets_ (dims::[Nat]) :: [Nat] where
-    Offsets_ '[] = '[1]
-    Offsets_ (dim ': dims) = (dim * Head (Offsets_ dims)) ': Offsets_ dims
-
 -- | Compute the trace of a square matrix. This is equivalent to contracting
 -- the matrix on its two slots.
 trace
@@ -663,10 +655,6 @@ type IOffset (dims::[Nat]) (n::Nat) = Product (Drop (n+1) dims)
 type MulFirstOffset (dims::[Nat]) (n::Nat) = Product (Drop n dims)
 
 type MulFirstCount (dims::[Nat]) (n::Nat) = Product (Take n dims)
-
-type family AllEq (n::Nat) (ns::[Nat]) :: Bool where
-    AllEq n '[] = 'True
-    AllEq n (m ': ms) = And (Equal n m) (AllEq n ms)
 
 type ChangeBasisConstraint a m e dims dim slots =
     ( Additive e

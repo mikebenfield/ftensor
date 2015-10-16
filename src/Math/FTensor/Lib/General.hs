@@ -12,8 +12,7 @@ not need to directly use this module.
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE UndecidableInstances #-} -- for CartesianProduct, 
-                                      -- AllMultiIndicesInBounds
+{-# LANGUAGE UndecidableInstances #-} -- for AllMultiIndicesInBounds
 
 module Math.FTensor.Lib.General (
     MultiIndexToI,
