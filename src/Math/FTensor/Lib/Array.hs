@@ -35,6 +35,7 @@ module Math.FTensor.Lib.Array (
     Prim,
 
     -- * Creating arrays.
+    writer,
     generate,
     unfoldN,
     convert,
@@ -58,7 +59,7 @@ import Data.Primitive.Types (Prim(..))
 import qualified Data.Primitive.Array as A
 import qualified Data.Primitive.ByteArray as BA
 
-import Math.FTensor.Internal.Check
+import qualified Math.FTensor.Internal.Check
 
 class (IsList (a e), Item (a e) ~ e) => Array a e where
     data Mutable s a e
@@ -114,7 +115,6 @@ class (IsList (a e), Item (a e) ~ e) => Array a e where
 -- | Unsafely access an element of an immutable array. Will perform bounds
 -- checks when the package is compiled with the Cabal option -fUnsafeChecks
 -- (off by default).
-{-# INLINE index #-}
 index :: Array a e => a e -> Int -> e
 index = \a i ->
     UNSAFE_CHECK
@@ -123,10 +123,11 @@ index = \a i ->
         (i, length a)
         $ basicIndex a i
 
+{-# INLINE index #-}
+
 -- | Unsafely access an element of a mutable array. Will perform bounds checks
 -- when the package is compiled with the Cabal option -fUnsafeChecks (off by
 -- default).
-{-# INLINE read #-}
 read :: Array a e => Mutable s a e -> Int -> ST s e
 read = \m i ->
     UNSAFE_CHECK
@@ -135,10 +136,11 @@ read = \m i ->
         (i, mLength m)
         $ basicRead m i
 
+{-# INLINE read #-}
+
 -- | Unsafely write an element of a mutable array. Will perform bounds checks
 -- when the package is compiled with the Cabal option -fUnsafeChecks (off by
 -- default).
-{-# INLINE write #-}
 write :: Array a e => Mutable s a e -> Int -> e -> ST s ()
 write = \m i x ->
     UNSAFE_CHECK
@@ -147,9 +149,13 @@ write = \m i x ->
         (i, mLength m)
         $ basicWrite m i x
 
+{-# INLINE write #-}
+
 -- | To implement @fromList@ in the @IsList@ class.
 arrayFromList :: Array a e => [e] -> a e
 arrayFromList lst = arrayFromListN (Prelude.length lst) lst
+
+{-# INLINE arrayFromList #-}
 
 -- | To implement @fromListN@ in the @IsList@ class.
 arrayFromListN :: Array a e => Int -> [e] -> a e
@@ -157,6 +163,8 @@ arrayFromListN len lst = unfoldN len f lst
   where
     f [] = error "fromListN: can't happen"
     f (x:xs) = (x, xs)
+
+{-# INLINABLE arrayFromListN #-}
 
 -- | To implement @toList@ in the @IsList@ class.
 arrayToList :: Array a e => a e -> [e]
@@ -166,11 +174,16 @@ arrayToList arr = loop 0
       | i < length arr = index arr i : loop (i+1)
       | otherwise = []
 
+{-# INLINABLE arrayToList #-}
+
+-- | To implement @(==)@ in @Eq@.
 arrayEq :: (Eq e, Array a e) => a e -> a e -> Bool
 arrayEq lhs rhs = len == length rhs && all f [0..len-1]
   where
     f i = index rhs i == index lhs i
     len = length lhs
+
+{-# INLINABLE arrayEq #-}
 
 -- | Immutable unboxed arrays of types which are instances of @Prim@. (Note
 -- that @Prim@ is from the @primitive@ package; users can implement it to allow
@@ -311,6 +324,17 @@ instance Array ArrayBoxed e where
     {-# INLINE freeze #-}
     freeze = \(MutableArrayBoxed ma) -> ArrayBoxed <$> A.unsafeFreezeArray ma
 
+writer :: Array a e => Mutable s a e -> ST s (e -> ST s ())
+writer ma = do
+    idx <- newSTRef 0
+    let f e = do
+            i <- readSTRef idx
+            write ma i e
+            writeSTRef idx (i+1)
+    return f
+
+{-# INLINABLE writer #-}
+
 -- | @generate n f@: an array of length @n@ whose element at position @i@
 -- is @f i@.
 generate :: Array a e => Int -> (Int -> e) -> a e
@@ -319,6 +343,8 @@ generate len f = runST $ do
     let at i = write newArr i (f i)
     mapM_ at [0..len-1]
     freeze newArr
+
+{-# INLINABLE generate #-}
 
 -- | @unfoldN n f init@: an array of length @n@, created by repeatedly
 -- applying @f@ to seeds starting with @init@.
@@ -334,13 +360,18 @@ unfoldN len f init = runST $ do
     mapM_  at [0..len-1]
     freeze newArr
 
+{-# INLINABLE unfoldN #-}
+
 -- | convert an immutable array from one type to another.
-{-# INLINE[1] convert #-}
 convert :: (Array a e, Array b e) => a e -> b e
 convert arr = generate (length arr) (index arr)
+
+{-# INLINE[1] convert #-}
 
 {-# RULES "convert/id" convert = id #-}
 
 -- | Not every array type can be a @Functor@, so this is provided.
 map :: (Array a e, Array b d) => (e -> d) -> a e -> b d
 map f arr = generate (length arr) (f . index arr)
+
+{-# INLINE map #-}

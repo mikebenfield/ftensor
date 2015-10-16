@@ -108,13 +108,17 @@ class BuilderConsumer t e (lengths::[Nat]) | e lengths -> t where
     build :: Monad m => Proxy lengths -> m e -> m t
 
 instance BuilderConsumer e e '[] where
-    consume _ f e = f e
-    build _ f = f
+    {-# INLINE consume #-}
+    consume _ = \f e -> f e
+
+    {-# INLINE build #-}
+    build _ = id
 
 instance (BuilderConsumer contained e lengths, KnownNat length)
     => BuilderConsumer [contained] e (length ': lengths) where
 
-    consume _ f list =
+    {-# INLINE consume #-}
+    consume _ = \f list ->
         UNSAFE_CHECK
             (length' == Prelude.length list)
             "fromList"
@@ -124,6 +128,7 @@ instance (BuilderConsumer contained e lengths, KnownNat length)
         length' :: Int
         length' = summon (Proxy::Proxy length)
 
+    {-# INLINE build #-}
     build _ f = replicateM length (build (Proxy::Proxy lengths) f)
       where
         length :: Int
@@ -145,12 +150,8 @@ instance
     fromList list =
         Tensor $ runST $ do
             newArr <- A.new $ summon (Proxy::Proxy (Product dims))
-            idx <- newSTRef (0::Int)
-            let at x = do
-                    i <- readSTRef idx
-                    A.write newArr i x
-                    writeSTRef idx (i+1)
-            consume (Proxy::Proxy dims) at list
+            writer <- A.writer newArr
+            consume (Proxy::Proxy dims) writer list
             A.freeze newArr
 
     fromListN _ = fromList
@@ -192,6 +193,8 @@ pIndex
     -> e
 pIndex (Tensor arr) p = A.index arr (multiIndexToI' (Proxy::Proxy dims) p)
 
+{-# INLINE pIndex #-}
+
 -- | Unsafely access a component of a tensor via a term level multi index. Will
 -- perform bounds checks when the package is compiled with the Cabal option
 -- -fUnsafeChecks (off by default). Example (assuming @N@ and @(:-)@ from
@@ -217,6 +220,8 @@ unsafeIndex (Tensor arr) multiIndex =
     where
       p :: Proxy dims
       p = Proxy
+
+{-# INLINE unsafeIndex #-}
 
 -- | Access a component of a tensor via a term level multi index. Will perform
 -- bounds checks when the package is compiled with the Cabal option
@@ -274,6 +279,8 @@ scalar (Tensor arr) =
         (A.length arr)
         $ A.index arr 0
 
+{-# INLINE scalar #-}
+
 -- * Creating
 
 type GenerateConstraint a e (dims::[Nat]) =
@@ -296,19 +303,22 @@ generate f = Tensor $ fromListN len (fmap f lists)
     lists :: [MultiIndex dims]
     lists = summon (Proxy::Proxy (AllMultiIndicesInBounds dims))
 
+{-# INLINABLE generate #-}
+
 -- | Convert between two tensors with different underlying array types.
 convert
     :: (A.Array a e, A.Array b e)
     => Tensor a dims e
     -> Tensor b dims e
 convert (Tensor arr) = Tensor $ A.convert arr
-{-# INLINE[1] convert #-}
 
-{-# RULES "convert/id" convert = id #-}
+{-# INLINE convert #-}
 
 -- | Turn a scalar into a tensor with empty dimension list.
 tensor :: A.Array a e => e -> Tensor a '[] e
 tensor x = Tensor (A.generate 1 $ const x)
+
+{-# INLINE tensor #-}
 
 -- * Mathematical operations
 
@@ -320,6 +330,8 @@ scale
     -> Tensor a dims e
 scale (Tensor arr) factor =
     Tensor $ A.generate (A.length arr) ((*.factor) . A.index arr)
+
+{-# INLINE scale #-}
 
 -- | Add tensors componentwise.
 add
@@ -336,6 +348,8 @@ add (Tensor arr1) (Tensor arr2) =
             (A.length arr1)
             (\i -> A.index arr1 i +. A.index arr2 i)
 
+{-# INLINE add #-}
+
 -- | Subtract tensors componentwise.
 minus
     :: (WithNegatives e, A.Array a e)
@@ -350,6 +364,8 @@ minus (Tensor arr1) (Tensor arr2) =
         $ Tensor $ A.generate
             (A.length arr1)
             (\i -> A.index arr1 i -. A.index arr2 i)
+
+{-# INLINE minus #-}
 
 type TensorProductConstraint a e (ds1::[Nat]) (ds2::[Nat]) =
     ( A.Array a e
@@ -369,14 +385,12 @@ tensorProduct
 tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
     -- this is faster than using unfoldN or generate
     newArr <- A.new (len1 * len2)
-    let oneRow = \i ->
-         let x = A.index arr1 i
-             i' = i*len2
-         in
-         mapM_
-            (\j -> A.write newArr (j+i') (x *. A.index arr2 j))
-            [0 .. len2-1]
-    mapM_ oneRow [0..len1-1]
+    write <- A.writer newArr
+    let oneRow i =
+            let x = A.index arr1 i
+            in
+            mapM_ (write . (x *.) . (A.index arr2)) [0 .. len2-1]
+    mapM_ oneRow [0 .. len1-1]
     A.freeze newArr
   where
     len1 :: Int
@@ -384,9 +398,25 @@ tensorProduct (Tensor arr1) (Tensor arr2) = Tensor $ runST $ do
     len2 :: Int
     len2 = summon (Proxy::Proxy (Product ds2))
 
+{-# INLINABLE tensorProduct #-}
+
+loop :: Int -> Int -> Int -> (Int -> ST s ()) -> ST s ()
+loop !i !increment !end f
+  | i < end = f i >> loop (i+increment) increment end f
+  | otherwise = return ()
+
+sumAt :: Additive e => Int -> Int -> Int -> (Int -> ST s e) -> ST s e
+sumAt !i !increment !end read = do
+    sum <- read i >>= newSTRef
+    loop (i+increment) increment end
+        (\i -> read i >>= (\k -> modifySTRef' sum (+. k)))
+    readSTRef sum
+
+{-# INLINE sumAt #-}
+
 data ContractArguments e s = ContractArguments
     { read :: Int -> ST s e
-    , write :: Int -> e -> ST s ()
+    , write :: e -> ST s ()
     , ijOffset :: Int
     , ijCount :: Int
     , firstOffset :: Int
@@ -397,24 +427,17 @@ data ContractArguments e s = ContractArguments
     }
 
 contract_ :: Additive e => ContractArguments e s -> ST s ()
-contract_ ContractArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
-    let writeOne i = do
-            writeIndex' <- readSTRef writeIndex
-            sumStartingAt i >>= write writeIndex'
-            writeSTRef writeIndex (writeIndex' + 1)
+contract_ ContractArguments{..} =
+    let writeOne !i =
+            sumAt i ijOffset (i+ijOffset*ijCount) read >>= write
         innerLoop !i =
-            mapM_ writeOne [i, i+1 .. i+lastCount-1]
+            loop i 1 (i+lastCount) writeOne
         middleLoop !i =
-            mapM_ innerLoop [i, i+middleOffset .. i+middleCount*middleOffset-1]
-
-        sumStartingAt i = read i >>= f (i+ijOffset*ijCount) (i+ijOffset) 
-        f !max !idx !sum
-          | idx < max = do
-                val <- read idx
-                f max (idx+ijOffset) (sum +. val)
-          | otherwise = return sum
+            loop i middleOffset (i+middleCount*middleOffset) innerLoop
     in
-    mapM_ middleLoop [0, firstOffset .. firstCount*firstOffset-1]
+    loop 0 firstOffset (firstCount*firstOffset) middleLoop
+
+{-# INLINE contract_ #-}
 
 -- | Contract a tensor on the given slots.
 --
@@ -431,9 +454,10 @@ contract
 contract (Tensor arr) _ _ = Tensor $ runST $ do
     newArr <-
         A.new (summon (Proxy::Proxy (Product (ContractedDims dims i j))))
+    writer <- A.writer newArr
     contract_ ContractArguments
         { read = return . A.index arr
-        , write = A.write newArr
+        , write = writer
         , ijOffset = summon (Proxy::Proxy (IJOffset dims i j))
         , ijCount = summon (Proxy:: Proxy (dims !! i))
         , firstOffset = summon (Proxy::Proxy (FirstOffset dims i j))
@@ -443,6 +467,8 @@ contract (Tensor arr) _ _ = Tensor $ runST $ do
         , lastCount = summon (Proxy::Proxy (LastCount dims i j))
         }
     A.freeze newArr
+
+{-# INLINABLE contract #-}
 
 type ContractConstraint a e (dims::[Nat]) (i::Nat) (j::Nat) =
     ( Equal i j ~ 'False
@@ -497,13 +523,12 @@ trace
     . (Additive e, KnownType dim Int, A.Array a e)
     => Tensor a '[dim, dim] e
     -> e
-trace (Tensor arr) = f dim1 (A.index arr 0)
+trace (Tensor arr) = runST $ sumAt 0 dim1 len (return . A.index arr)
   where
-    f !i !sum
-      | i < len = f (i + dim1) (sum +. A.index arr i)
-      | otherwise = sum
     len = A.length arr
     dim1 = 1 + summon (Proxy::Proxy dim)
+
+{-# INLINE trace #-}
 
 -- | Find the dot product of two vectors. This is equivalent to taking the
 -- tensor product of the vectors and then contracting on the two slots.
@@ -517,14 +542,13 @@ dot (Tensor arr1) (Tensor arr2) =
         (len1 == len2)
         "dot"
         (len1, len2)
-        f 1 (g 0)
+        (runST $ sumAt 0 1 len1 (return . g))
   where
-    f !i !sum
-      | i < len1 = f (i+1) (sum +. g i)
-      | otherwise = sum
     g i = A.index arr1 i *. A.index arr2 i
     len1 = A.length arr1
     len2 = A.length arr2
+
+{-# INLINE dot #-}
 
 type MulConstraint a e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat) =
     ( Additive e
@@ -544,7 +568,7 @@ type MulConstraint a e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat) =
 data MulArguments e s = MulArguments
     { read1 :: Int -> ST s e
     , read2 :: Int -> ST s e
-    , mWrite :: Int -> e -> ST s ()
+    , mWrite :: e -> ST s ()
     , iOffset1 :: Int
     , iOffset2 :: Int
     , iCount :: Int
@@ -556,31 +580,48 @@ data MulArguments e s = MulArguments
     , lastCount2 :: Int
     }
 
+loop2 :: Int -> Int -> Int -> Int -> Int -> (Int -> Int -> ST s ()) -> ST s ()
+loop2 !i !iIncrement !iEnd !j !jIncrement f
+  | i < iEnd =
+      f i j >> loop2 (i+iIncrement) iIncrement iEnd (j+jIncrement) jIncrement f
+  | otherwise = return ()
+
+sumAt2
+    :: Additive e
+    => Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> (Int -> Int -> ST s e)
+    -> ST s e
+sumAt2 !i !iIncrement !iEnd !j !jIncrement read = do
+    sum <- read i j >>= newSTRef
+    loop2 (i+iIncrement) iIncrement iEnd (j+jIncrement) jIncrement
+        (\i j -> read i j >>= (\k -> modifySTRef' sum (+. k)))
+    readSTRef sum
+
+{-# INLINE sumAt2 #-}
+
 mul_ :: (Additive e, Multiplicative e) => MulArguments e s -> ST s ()
-mul_ MulArguments{..} = newSTRef (0::Int) >>= \writeIndex ->
-    let writeOne !i !j = do
-            writeIndex' <- readSTRef writeIndex
-            sumStartingAt i j >>= mWrite writeIndex'
-            writeSTRef writeIndex (writeIndex' + 1)
+mul_ MulArguments{..} =
+    let writeOne !i !j =
+            sumAt2 i iOffset1 (i+iOffset1*iCount) j iOffset2
+                (\i j -> do
+                    iV <- read1 i
+                    jV <- read2 j
+                    return (iV *. jV)
+                    ) >>= mWrite
         innerLoop !i !j =
-            mapM_ (writeOne i) [j, j+1 .. j + lastCount2 - 1]
+            loop j 1 (j+lastCount2) (writeOne i)
         innerMiddleLoop !i =
-            mapM_ (innerLoop i)
-                [0, firstOffset2 .. firstOffset2*firstCount2 - 1]
+            loop 0 firstOffset2 (firstOffset2*firstCount2) (innerLoop i)
         outerMiddleLoop !i =
-            mapM_ innerMiddleLoop [i, i+1 .. i + lastCount1 - 1]
-        sumStartingAt !i !j = do
-            i' <- read1 i
-            j' <- read2 j
-            f (i + iOffset1*iCount) (i + iOffset1) (j + iOffset2) (i'*.j')
-        f !iMax !i !j !sum
-          | i < iMax = do
-                i' <- read1 i
-                j' <- read2 j
-                f iMax (i + iOffset1) (j + iOffset2) (sum +. i' *. j')
-          | otherwise = return sum
+            loop i 1 (i+lastCount1) innerMiddleLoop
     in
-    mapM_ outerMiddleLoop [0, firstOffset1 .. firstOffset1*firstCount1 - 1]
+    loop 0 firstOffset1 (firstOffset1*firstCount1) outerMiddleLoop
+
+{-# INLINE mul_ #-}
 
 -- | Applying @mul@ to two tensors is equivalent to taking their
 -- @tensorProduct@ and then contracting on the two adjusted slots.
@@ -595,10 +636,11 @@ mul
 mul (Tensor arr1) _ (Tensor arr2) _ = Tensor $ runST $ do
     newArr <-
         A.new (summon (Proxy::Proxy (Product (MulNewDims dims1 i dims2 j))))
+    writer <- A.writer newArr
     mul_ MulArguments
         { read1 = return . A.index arr1
         , read2 = return . A.index arr2
-        , mWrite = A.write newArr
+        , mWrite = writer
         , iOffset1 = summon (Proxy::Proxy (IOffset dims1 i))
         , iOffset2 = summon (Proxy::Proxy (IOffset dims2 j))
         , iCount = summon (Proxy::Proxy (dims1 !! i))
@@ -610,6 +652,8 @@ mul (Tensor arr1) _ (Tensor arr2) _ = Tensor $ runST $ do
         , lastCount2 = summon (Proxy::Proxy (IOffset dims2 j))
         }
     A.freeze newArr
+
+{-# INLINABLE mul #-}
 
 type MulNewDims (dims1::[Nat]) (i::Nat) (dims2::[Nat]) (j::Nat) =
     Delete dims1 i ++ Delete dims2 j
@@ -639,10 +683,12 @@ changeBasis
     -> Tensor a dims e
 changeBasis = changeBasis_
 
+{-# INLINABLE changeBasis #-}
+
 data ChangeBasisArguments e s = ChangeBasisArguments
     { readT :: Int -> ST s e
     , readM :: Int -> ST s e
-    , writeT :: Int -> e -> ST s ()
+    , writeT :: e -> ST s ()
     , aOffset :: Int
     , aCount :: Int
     , bOffset :: Int
@@ -655,29 +701,21 @@ changeBasis1_
     => ChangeBasisArguments e s 
     -> ST s ()
 changeBasis1_ ChangeBasisArguments{..} = do
-    writeIdx <- newSTRef 0
-    mapM_ (writeOne writeIdx) $ do
-        outerOffset <- [0, aOffset .. aOffset*aCount - 1]
-        idxM <- [0, bCount .. bCount*bCount - 1]
-        idx <- [outerOffset, outerOffset + 1 ..
-            outerOffset + cCount - 1]
-        return (idx, idxM)
+    loop 0 aOffset (aOffset*aCount) middleLoop
   where
-    writeOne !writeIdx (!idx, !idxM) = do
-        i <- readSTRef writeIdx
-        sumAt idx idxM >>= writeT i
-        writeSTRef writeIdx (i+1)
-    sumAt idx idxM = do
-        val1 <- readT idx
-        val2 <- readM idxM
-        f (idx+bOffset) (idxM+1) (idxM+bCount) (val1 *. val2)
-    f !idx !idxM !idxMMax !sum
-      | idxM < idxMMax = do
-        i' <- readT idx
-        j' <- readM idxM
-        f (idx + bOffset) (idxM + 1) idxMMax (sum +. i' *. j')
-      | otherwise = return sum
+    middleLoop !outerOffset =
+        loop 0 bCount (bCount*bCount) (innerLoop outerOffset)
+    innerLoop !outerOffset !idxM =
+        loop outerOffset 1 (outerOffset + cCount) (writeOne idxM)
+    writeOne !idxM !idx = do
+        sumAt2 idxM 1 (idxM+bCount) idx bOffset
+            (\j i -> do
+                iV <- readT i
+                jV <- readM j
+                return (iV *. jV)
+                ) >>= writeT
 
+{-# INLINE changeBasis1_ #-}
 
 class ChangeBasisClass (dims::[Nat]) (dim::Nat) (slots::[Nat]) where
     changeBasis_
@@ -702,15 +740,18 @@ instance
     , KnownNat (CCount dims slot)
     )
     => ChangeBasisClass dims dim (slot ': slots) where
+
+    {-# INLINE changeBasis_ #-}
     changeBasis_ (Tensor arrT) m@(Tensor arrM) _ =
         changeBasis_ t m (Proxy::Proxy slots)
       where
         t = Tensor $ runST $ do
             newArr <- A.new (A.length arrT)
+            writer <- A.writer newArr
             changeBasis1_ ChangeBasisArguments
                 { readT = return . A.index arrT
                 , readM = return . A.index arrM
-                , writeT = A.write newArr
+                , writeT = writer
                 , aOffset = summon (Proxy::Proxy (AOffset dims slot))
                 , aCount = summon (Proxy::Proxy (ACount dims slot))
                 , bOffset = summon (Proxy::Proxy (BOffset dims slot))
@@ -733,24 +774,15 @@ type family NotIn (list::[Nat]) (item::Nat) :: Constraint where
     NotIn (x ': xs) y = NotIn xs y
 
 changeBasisAll
-    :: forall a e (dim::Nat) (dims::[Nat])
-    . (Additive e, Multiplicative e, AllEq dim dims ~ 'True,
-      dim ~ (dims !! 0),
-      KnownNat dim, GenerateConstraint a e dims,
-      KnownType dims (MultiIndex dims))
+    :: forall a m e dims dim
+    . ChangeBasisConstraint a m e dims dim (EnumFromTo 0 (Length dims - 1))
     => Tensor a dims e
     -> Tensor a [dim, dim] e
     -> Tensor a dims e
-changeBasisAll t m = generate f
-  where
-    f multiIndex =
-        foldr1 (+.) $ map (\mi -> indexMat mi multiIndex *. index t mi) lists
-    indexMat :: SizedList s Int -> SizedList s Int -> e
-    indexMat (i:-N) (k:-N) = index m (k:-i:-N)
-    indexMat (i:-is) (k:-ks) = index m (k:-i:-N) *. indexMat is ks
-    indexMat _ _ = error "changeBasisAll: can't happen"
-    lists :: [MultiIndex dims]
-    lists = summon (Proxy::Proxy (AllMultiIndicesInBounds dims))
+changeBasisAll t m =
+    changeBasis t m (Proxy::Proxy (EnumFromTo 0 (Length dims - 1)))
+
+{-# INLINE changeBasisAll #-}
 
 instance (Additive e, A.Array a e) => Additive (Tensor a dims e) where
     {-# INLINE (+.) #-}
