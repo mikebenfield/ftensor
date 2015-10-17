@@ -3,11 +3,39 @@ version:             0.1.0.0
 synopsis:            Finite dimensional tensor types.
 license:             BSD3
 license-file:        LICENSE
-author:              Michael Benfield
-maintainer:          mike.benfield@gmail.com
+author:              Michael Benfield <mike.benfield@gmail.com>
+maintainer:          Michael Benfield <mike.benfield@gmail.com>
 category:            Math
 build-type:          Simple
 cabal-version:       >=1.10
+description:
+  Finite dimensional tensor types, implemented as contiguous arrays for memory
+  locality. Much use is made of Haskell's nascent dependent typing features; a
+  tensor's shape is part of its type. Tensors are provided in both boxed and
+  unboxed versions.
+  .
+  In particular because of the fact that this library uses cutting-edge GHC
+  features (including the GHC plugin ghc-typelits-natnormalise), the API
+  exported here should not be regarded as stable; it will be changed to take
+  advantage of new features of GHC.
+  .
+  The library is structured as follows:
+  .
+  ["Math.FTensor.General"] The general tensor types and operations.
+  .
+  ["Math.FTensor.Algebra"] Classes for algebraic operations, because Haskell's
+  built-in numeric classes are too coarse. (For instance, we want to be able
+  to add tensors, but tensors cannot implement all the operations in Num.)
+  .
+  ["Math.FTensor.SizedList"] Lists with their length in their type. These can
+  be used as indices into tensors.
+  .
+  ["Math.FTensor.Lib.Array"] The array types underlying the tensor
+  implementation. As with other modules under Math.FTensor.Lib, casual use of
+  this library likely will not require this module.
+
+extra-source-files:
+  README.md
 
 flag BoundsChecks
   description: Enable bounds checks
@@ -34,10 +62,10 @@ library
     Math.FTensor.Internal.Check
     Math.FTensor.SizedList
   build-depends:
-    base >=4.8 && <4.9,
-    primitive,
-    deepseq,
-    ghc-typelits-natnormalise
+    base >=4.8,
+    primitive >= 0.6.1,
+    deepseq >= 1.4,
+    ghc-typelits-natnormalise >= 0.3
   hs-source-dirs:      src
   default-language:    Haskell2010
   default-extensions:  
@@ -61,6 +89,7 @@ library
     include
   install-includes:
     ftensor.h
+
   if flag(BoundsChecks)
     cpp-options: -DFTENSOR_BOUNDS_CHECKS
 
@@ -73,7 +102,7 @@ library
 test-suite ftensor-test
   type: exitcode-stdio-1.0
   build-depends:
-    base >=4.8 && <4.9,
+    base >=4.8,
     tasty >=0.10,
     tasty-hunit >=0.9,
     tasty-quickcheck >=0.8,

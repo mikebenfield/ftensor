@@ -3,7 +3,13 @@ Module: Math.FTensor.General
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
-General tensor types.
+General tensor types. Here "general" means not necessarily symmetric or
+alternating; future versions of this library may provide special types for
+those tensors.
+
+Tensors here are implemented as contiguous arrays in row-major order. This is
+deliberately a "leaky abstraction"; users of the library may directly operate
+on the underlying arrays if desired -- but often will not need to.
 -}
 
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
@@ -12,13 +18,13 @@ General tensor types.
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE UndecidableInstances #-} -- for ContractedDims, IsList
+{-# LANGUAGE UndecidableInstances #-} -- for ContractedDims
 
 module Math.FTensor.General (
     -- * Types
     Tensor(..),
-    TensorBoxed,
-    TensorPrim,
+    TensorBoxed(..),
+    TensorPrim(..),
     MultiIndex,
 
     -- * Indexing
@@ -165,8 +171,12 @@ instance
                 return $ A.index arr i
         build (Proxy::Proxy dims) f
 
+-- | Tensors build on arrays of boxed values. These are more general and
+-- flexible, at the cost of greater memory usage and worse memory locality.
 type TensorBoxed = Tensor A.ArrayBoxed
 
+-- | Tensors built on arrays of primitive values. Elements must be instances of
+-- @Prim@.
 type TensorPrim = Tensor A.ArrayPrim
 
 type MultiIndex (dims::[Nat]) = SizedList (Length dims) Int
