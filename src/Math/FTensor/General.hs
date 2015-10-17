@@ -260,6 +260,8 @@ index t multiIndex =
       p :: Proxy dims
       p = Proxy
 
+{-# INLINABLE index #-}
+
 -- | Safely access a component of a tensor via a term level multi index.
 -- Gives @Nothing@ if the indicated multi index is out of bounds.
 -- Example (assuming @N@ and @(:-)@ from
@@ -279,6 +281,8 @@ maybeIndex
 maybeIndex t multiIndex
   | inBounds (Proxy::Proxy dims) multiIndex = Just $ unsafeIndex t multiIndex
   | otherwise = Nothing
+
+{-# INLINABLE maybeIndex #-}
 
 -- | A tensor with an empty dimension list is essentially a scalar. This
 -- function accesses the scalar.
