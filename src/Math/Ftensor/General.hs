@@ -23,8 +23,8 @@ on the underlying arrays if desired -- but often will not need to.
 module Math.Ftensor.General (
     -- * Types
     Tensor(..),
-    TensorBoxed(..),
-    TensorPrim(..),
+    TensorBoxed,
+    TensorPrim,
     MultiIndex,
 
     -- * Indexing
