@@ -1,5 +1,5 @@
 {-|
-Module: Math.FTensor.SizedList
+Module: Math.Ftensor.SizedList
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
@@ -20,7 +20,7 @@ Haskell's @Prelude@.
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-} -- for Flattenable
 
-module Math.FTensor.SizedList (
+module Math.Ftensor.SizedList (
     SizedList(..),
     (++),
     concat,

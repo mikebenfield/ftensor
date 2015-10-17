@@ -6,7 +6,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Tests.Math.FTensor.SizedList (
+module Tests.Math.Ftensor.SizedList (
     tests
 ) where
 
@@ -17,9 +17,9 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty.TH (testGroupGenerator)
 
-import Math.FTensor.SizedList
+import Math.Ftensor.SizedList
 
-tests = testGroup "Tests.Math.FTensor.SizedList"
+tests = testGroup "Tests.Math.Ftensor.SizedList"
     [smallCheckProperties, autoTests]
 
 autoTests = $(testGroupGenerator)

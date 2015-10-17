@@ -7,7 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Tests.Math.FTensor.Lib.Array (
+module Tests.Math.Ftensor.Lib.Array (
     tests
 ) where
 
@@ -21,9 +21,9 @@ import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty.TH (testGroupGenerator)
 import qualified Test.Tasty.SmallCheck as SC
 
-import Math.FTensor.Lib.Array
+import Math.Ftensor.Lib.Array
 
-tests = testGroup "Tests.Math.FTensor.Lib.Array" [smallCheckProperties, autoTests]
+tests = testGroup "Tests.Math.Ftensor.Lib.Array" [smallCheckProperties, autoTests]
 
 autoTests = $(testGroupGenerator)
 

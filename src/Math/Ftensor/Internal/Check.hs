@@ -1,4 +1,4 @@
-module Math.FTensor.Internal.Check (
+module Math.Ftensor.Internal.Check (
     check,
     noCheck,
 ) where

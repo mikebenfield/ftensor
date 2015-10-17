@@ -1,11 +1,11 @@
 {-|
-Module: Math.FTensor.Lib.Array
+Module: Math.Ftensor.Lib.Array
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
 Simple, efficient indexed arrays, either boxed or not.
 
-Like other modules under @Math.FTensor.Lib@, casual users of the library should
+Like other modules under @Math.Ftensor.Lib@, casual users of the library should
 not need to directly use this module.
 
 The types here are just a small wrapper around @Data.Primitive.Array@ and
@@ -21,7 +21,7 @@ perform bounds checks when the package is compiled with the Cabal option
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MagicHash #-}
 
-module Math.FTensor.Lib.Array (
+module Math.Ftensor.Lib.Array (
     -- * The @Array@ class and common functions.
     Array(..),
     index,
@@ -58,7 +58,7 @@ import Data.Primitive.Types (Prim(..))
 import qualified Data.Primitive.Array as A
 import qualified Data.Primitive.ByteArray as BA
 
-import qualified Math.FTensor.Internal.Check
+import qualified Math.Ftensor.Internal.Check
 
 class (IsList (a e), Item (a e) ~ e) => Array a e where
     data Mutable s a e

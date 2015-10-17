@@ -8,7 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Tests.Math.FTensor.General (
+module Tests.Math.Ftensor.General (
     tests
 ) where
 
@@ -22,12 +22,12 @@ import qualified Test.Tasty.SmallCheck as SC
 
 import Test.SmallCheck.Series hiding (generate, Positive)
 
-import Math.FTensor.Algebra
-import Math.FTensor.Lib.General
-import Math.FTensor.General
-import Math.FTensor.SizedList
+import Math.Ftensor.Algebra
+import Math.Ftensor.Lib.General
+import Math.Ftensor.General
+import Math.Ftensor.SizedList
 
-import Math.FTensor.Lib.TypeList
+import Math.Ftensor.Lib.TypeList
 
 autoTests = $(testGroupGenerator)
 

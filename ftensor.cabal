@@ -21,17 +21,17 @@ description:
   .
   The library is structured as follows:
   .
-  ["Math.FTensor.General"] The general tensor types and operations.
+  ["Math.Ftensor.General"] The general tensor types and operations.
   .
-  ["Math.FTensor.Algebra"] Classes for algebraic operations, because Haskell's
+  ["Math.Ftensor.Algebra"] Classes for algebraic operations, because Haskell's
   built-in numeric classes are too coarse. (For instance, we want to be able
   to add tensors, but tensors cannot implement all the operations in Num.)
   .
-  ["Math.FTensor.SizedList"] Lists with their length in their type. These can
+  ["Math.Ftensor.SizedList"] Lists with their length in their type. These can
   be used as indices into tensors.
   .
-  ["Math.FTensor.Lib.Array"] The array types underlying the tensor
-  implementation. As with other modules under Math.FTensor.Lib, casual use of
+  ["Math.Ftensor.Lib.Array"] The array types underlying the tensor
+  implementation. As with other modules under Math.Ftensor.Lib, casual use of
   this library likely will not require this module.
 
 extra-source-files:
@@ -54,13 +54,13 @@ flag InternalChecks
 
 library
   exposed-modules:
-    Math.FTensor.Algebra
-    Math.FTensor.General
-    Math.FTensor.Lib.Array
-    Math.FTensor.Lib.General
-    Math.FTensor.Lib.TypeList
-    Math.FTensor.Internal.Check
-    Math.FTensor.SizedList
+    Math.Ftensor.Algebra
+    Math.Ftensor.General
+    Math.Ftensor.Lib.Array
+    Math.Ftensor.Lib.General
+    Math.Ftensor.Lib.TypeList
+    Math.Ftensor.Internal.Check
+    Math.Ftensor.SizedList
   build-depends:
     base >=4.8,
     primitive >= 0.6.1,

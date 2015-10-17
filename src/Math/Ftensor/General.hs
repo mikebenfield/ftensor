@@ -1,5 +1,5 @@
 {-|
-Module: Math.FTensor.General
+Module: Math.Ftensor.General
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
@@ -20,7 +20,7 @@ on the underlying arrays if desired -- but often will not need to.
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE UndecidableInstances #-} -- for ContractedDims
 
-module Math.FTensor.General (
+module Math.Ftensor.General (
     -- * Types
     Tensor(..),
     TensorBoxed(..),
@@ -77,14 +77,14 @@ import GHC.TypeLits
 
 import Control.DeepSeq
 
-import qualified Math.FTensor.Internal.Check
+import qualified Math.Ftensor.Internal.Check
 
-import Math.FTensor.Lib.General
-import Math.FTensor.Lib.TypeList
-import qualified Math.FTensor.Lib.Array as A
+import Math.Ftensor.Lib.General
+import Math.Ftensor.Lib.TypeList
+import qualified Math.Ftensor.Lib.Array as A
 
-import Math.FTensor.Algebra
-import Math.FTensor.SizedList
+import Math.Ftensor.Algebra
+import Math.Ftensor.SizedList
 
 #include "ftensor.h"
 
@@ -209,7 +209,7 @@ pIndex (Tensor arr) p = A.index arr (multiIndexToI' (Proxy::Proxy dims) p)
 -- | Unsafely access a component of a tensor via a term level multi index. Will
 -- perform bounds checks when the package is compiled with the Cabal option
 -- -fUnsafeChecks (off by default). Example (assuming @N@ and @(:-)@ from
--- @Math.FTensor.SizedList@ are in scope):
+-- @Math.Ftensor.SizedList@ are in scope):
 --
 -- >>> let (x::TensorBoxed '[2, 2] Int) = fromList [[0, 1], [2, 3]]
 -- >>> unsafeIndex x (1:-0:-N)
@@ -237,7 +237,7 @@ unsafeIndex (Tensor arr) multiIndex =
 -- | Access a component of a tensor via a term level multi index. Will perform
 -- bounds checks when the package is compiled with the Cabal option
 -- -fBoundsChecks (on by default). Example (assuming @N@ and @(:-)@ from
--- @Math.FTensor.SizedList@ are in scope):
+-- @Math.Ftensor.SizedList@ are in scope):
 --
 -- >>> let (x::TensorBoxed '[2, 2] Int) = fromList [[0, 1], [2, 3]]
 -- >>> index x (1:-0:-N)
@@ -265,7 +265,7 @@ index t multiIndex =
 -- | Safely access a component of a tensor via a term level multi index.
 -- Gives @Nothing@ if the indicated multi index is out of bounds.
 -- Example (assuming @N@ and @(:-)@ from
--- @Math.FTensor.SizedList@ are in scope):
+-- @Math.Ftensor.SizedList@ are in scope):
 --
 -- >>> let (x::TensorBoxed '[2, 2] Int) = [[0, 1], [2, 3]]
 -- >>> maybeIndex x (1:-0:-N)

@@ -1,5 +1,5 @@
 {-|
-Module: Math.FTensor.Algebra
+Module: Math.Ftensor.Algebra
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
@@ -36,7 +36,7 @@ Similarly, for an instance of @Fractional@
 
 {-# LANGUAGE CPP #-}
 
-module Math.FTensor.Algebra (
+module Math.Ftensor.Algebra (
     Additive(..),
     WithZero(..),
     WithNegatives(..),

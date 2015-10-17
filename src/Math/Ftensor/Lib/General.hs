@@ -1,11 +1,11 @@
 {-|
-Module: Math.FTensor.Lib.General
+Module: Math.Ftensor.Lib.General
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
 Functions and type families useful in implementing tensor types.
 
-Like other modules under @Math.FTensor.Lib@, casual users of the library should
+Like other modules under @Math.Ftensor.Lib@, casual users of the library should
 not need to directly use this module.
 -}
 
@@ -14,7 +14,7 @@ not need to directly use this module.
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-} -- for AllMultiIndicesInBounds
 
-module Math.FTensor.Lib.General (
+module Math.Ftensor.Lib.General (
     MultiIndexToI,
     multiIndexToI',
     multiIndexToI,
@@ -27,8 +27,8 @@ import Data.Proxy
 import GHC.Exts (Constraint)
 import GHC.TypeLits
 
-import Math.FTensor.SizedList
-import Math.FTensor.Lib.TypeList
+import Math.Ftensor.SizedList
+import Math.Ftensor.Lib.TypeList
 
 type family InBounds (dims::[Nat]) (multiIndex::[Nat]) :: Constraint where
     InBounds '[] '[] = ()

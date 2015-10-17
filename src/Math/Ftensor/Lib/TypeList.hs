@@ -1,11 +1,11 @@
 {-|
-Module: Math.FTensor.Lib.TypeList
+Module: Math.Ftensor.Lib.TypeList
 Copyright: (c) 2015 Michael Benfield
 License: BSD-3
 
 Functions for working with type level lists.
 
-Like other modules under @Math.FTensor.Lib@, casual users of the library should
+Like other modules under @Math.Ftensor.Lib@, casual users of the library should
 not need to directly use this module.
 -}
 
@@ -14,7 +14,7 @@ not need to directly use this module.
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Math.FTensor.Lib.TypeList (
+module Math.Ftensor.Lib.TypeList (
     -- * Tuples
     Fst,
     Snd,
@@ -56,7 +56,7 @@ import Prelude hiding ((++))
 import Data.Proxy
 import GHC.TypeLits
 
-import Math.FTensor.SizedList hiding ((++))
+import Math.Ftensor.SizedList hiding ((++))
 
 -- * Tuples
 
