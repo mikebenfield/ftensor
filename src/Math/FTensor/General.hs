@@ -543,6 +543,29 @@ dot (Tensor arr1) (Tensor arr2) =
 
 {-# INLINE dot #-}
 
+loop2 :: Int -> Int -> Int -> Int -> Int -> (Int -> Int -> ST s ()) -> ST s ()
+loop2 !i !iIncrement !iEnd !j !jIncrement f
+  | i < iEnd =
+      f i j >> loop2 (i+iIncrement) iIncrement iEnd (j+jIncrement) jIncrement f
+  | otherwise = return ()
+
+sumAt2
+    :: Additive e
+    => Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> (Int -> Int -> ST s e)
+    -> ST s e
+sumAt2 !i !iIncrement !iEnd !j !jIncrement read = do
+    sum <- read i j >>= newSTRef
+    loop2 (i+iIncrement) iIncrement iEnd (j+jIncrement) jIncrement
+        (\i j -> read i j >>= (\k -> modifySTRef' sum (+. k)))
+    readSTRef sum
+
+{-# INLINE sumAt2 #-}
+
 type MulConstraint a e (dims1::[Nat]) (dims2::[Nat]) (i::Nat) (j::Nat) =
     ( Additive e
     , Multiplicative e
@@ -572,29 +595,6 @@ data MulArguments e s = MulArguments
     , firstCount2 :: Int
     , lastCount2 :: Int
     }
-
-loop2 :: Int -> Int -> Int -> Int -> Int -> (Int -> Int -> ST s ()) -> ST s ()
-loop2 !i !iIncrement !iEnd !j !jIncrement f
-  | i < iEnd =
-      f i j >> loop2 (i+iIncrement) iIncrement iEnd (j+jIncrement) jIncrement f
-  | otherwise = return ()
-
-sumAt2
-    :: Additive e
-    => Int
-    -> Int
-    -> Int
-    -> Int
-    -> Int
-    -> (Int -> Int -> ST s e)
-    -> ST s e
-sumAt2 !i !iIncrement !iEnd !j !jIncrement read = do
-    sum <- read i j >>= newSTRef
-    loop2 (i+iIncrement) iIncrement iEnd (j+jIncrement) jIncrement
-        (\i j -> read i j >>= (\k -> modifySTRef' sum (+. k)))
-    readSTRef sum
-
-{-# INLINE sumAt2 #-}
 
 mul_ :: (Additive e, Multiplicative e) => MulArguments e s -> ST s ()
 mul_ MulArguments{..} =
@@ -689,14 +689,14 @@ changeBasis1_
     :: (Additive e, Multiplicative e)
     => ChangeBasisArguments e s 
     -> ST s ()
-changeBasis1_ ChangeBasisArguments{..} = do
+changeBasis1_ ChangeBasisArguments{..} =
     loop 0 aOffset (aOffset*aCount) middleLoop
   where
     middleLoop !outerOffset =
         loop 0 bCount (bCount*bCount) (innerLoop outerOffset)
     innerLoop !outerOffset !idxM =
         loop outerOffset 1 (outerOffset + cCount) (writeOne idxM)
-    writeOne !idxM !idx = do
+    writeOne !idxM !idx =
         sumAt2 idxM 1 (idxM+bCount) idx bOffset
             (\j i -> do
                 iV <- readT i
@@ -784,7 +784,7 @@ instance
     )
     => WithZero (Tensor a dims e) where
 
-    {-# INLINE zero #-}
+    {-# INLINABLE zero #-}
     zero = Tensor $ runST $
         A.replicate (summon (Proxy::Proxy (Product dims))) zero >>= A.freeze
 
@@ -818,7 +818,7 @@ instance (Multiplicative e, A.Array a e)
 instance (WithOne e, A.Array a e)
     => WithOne (Tensor a '[] e) where
 
-    {-# INLINE one #-}
+    {-# INLINABLE one #-}
     one = tensor one
 
 instance (WithReciprocals e, A.Array a e)
