@@ -538,7 +538,8 @@ trace (Tensor arr) = runST $ sumAt 0 dim1 len (return . A.index arr)
 {-# INLINE trace #-}
 
 -- | Find the dot product of two vectors. This is equivalent to taking the
--- tensor product of the vectors and then contracting on the two slots.
+-- tensor product of the vectors and then contracting on the two slots,
+-- and then applying @scalar@.
 dot
     :: (Additive e, Multiplicative e, A.Array a e)
     => Tensor a '[dim] e
