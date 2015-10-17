@@ -1,7 +1,7 @@
 {-|
 Module: Math.Ftensor.Lib.TypeList
 Copyright: (c) 2015 Michael Benfield
-License: BSD-3
+License: ISC
 
 Functions for working with type level lists.
 

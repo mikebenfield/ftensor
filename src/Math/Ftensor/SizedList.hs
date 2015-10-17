@@ -1,7 +1,7 @@
 {-|
 Module: Math.Ftensor.SizedList
 Copyright: (c) 2015 Michael Benfield
-License: BSD-3
+License: ISC
 
 Lists carrying their size in their type. These are used for runtime indexing
 into tensors. Many of the functions duplicate functionality for lists from

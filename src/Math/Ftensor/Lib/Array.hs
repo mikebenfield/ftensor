@@ -1,7 +1,7 @@
 {-|
 Module: Math.Ftensor.Lib.Array
 Copyright: (c) 2015 Michael Benfield
-License: BSD-3
+License: ISC
 
 Simple, efficient indexed arrays, either boxed or not.
 

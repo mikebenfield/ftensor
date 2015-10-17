@@ -1,7 +1,7 @@
 {-|
 Module: Math.Ftensor.Algebra
 Copyright: (c) 2015 Michael Benfield
-License: BSD-3
+License: ISC
 
 Classes supporting arithmetic operations. Haskell's numeric classes are too
 coarse for our needs. Types which are instances of more than one of these

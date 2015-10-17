@@ -1,7 +1,7 @@
 {-|
 Module: Math.Ftensor.General
 Copyright: (c) 2015 Michael Benfield
-License: BSD-3
+License: ISC
 
 General tensor types. Here "general" means not necessarily symmetric or
 alternating; future versions of this library may provide special types for

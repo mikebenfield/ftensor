@@ -1,7 +1,7 @@
 {-|
 Module: Math.Ftensor.Lib.General
 Copyright: (c) 2015 Michael Benfield
-License: BSD-3
+License: ISC
 
 Functions and type families useful in implementing tensor types.
 

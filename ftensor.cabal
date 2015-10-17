@@ -1,7 +1,7 @@
 name:                ftensor
 version:             0.1.0.0
 synopsis:            Finite dimensional tensor types.
-license:             BSD3
+license:             ISC
 license-file:        LICENSE
 author:              Michael Benfield <mike.benfield@gmail.com>
 maintainer:          Michael Benfield <mike.benfield@gmail.com>
